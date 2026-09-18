@@ -1,0 +1,122 @@
+{
+  "projects": [
+    {
+      "slug": "kot-etudiant",
+      "title": "Kot étudiant",
+      "category": "prive",
+      "description": "Un espace personnel imaginé pour conjuguer intimité, confort et quotidien étudiant.",
+      "cover": "assets/projects/01-kot-etudiant/02-photo-maquette-2.webp",
+      "images": [
+        "assets/projects/01-kot-etudiant/02-photo-maquette-2.webp",
+        "assets/projects/01-kot-etudiant/01-photo-maquette.webp",
+        "assets/projects/01-kot-etudiant/03-photo-maquette-vue-haut.webp"
+      ],
+      "layout": "portrait"
+    },
+    {
+      "slug": "moooi-stand-commercial",
+      "title": "Moooi — stand commercial",
+      "category": "public",
+      "description": "Un stand commercial conçu comme une expérience de marque, graphique et immersive.",
+      "cover": "assets/projects/02-stand-moooi/02-photo-maquette-2.webp",
+      "images": [
+        "assets/projects/02-stand-moooi/02-photo-maquette-2.webp",
+        "assets/projects/02-stand-moooi/05-photo-maquette.webp",
+        "assets/projects/02-stand-moooi/01-detail-fauteuil-maquette.webp",
+        "assets/projects/02-stand-moooi/03-photo-maquette-3.webp",
+        "assets/projects/02-stand-moooi/04-photo-maquette-4.webp"
+      ],
+      "layout": "square"
+    },
+    {
+      "slug": "amenagement-patisserie",
+      "title": "Aménagement d’une pâtisserie",
+      "category": "public",
+      "description": "Un lieu de restauration rythmé par les matières, les parcours et la lumière.",
+      "cover": "assets/projects/03-patisserie/05-vue-1.webp",
+      "images": [
+        "assets/projects/03-patisserie/05-vue-1.webp",
+        "assets/projects/03-patisserie/06-vue-2.webp",
+        "assets/projects/03-patisserie/07-vue-3.webp",
+        "assets/projects/03-patisserie/01-photo-maquette.webp",
+        "assets/projects/03-patisserie/02-photo-maquette-2.webp",
+        "assets/projects/03-patisserie/03-photo-maquette-3.webp",
+        "assets/projects/03-patisserie/04-photo-maquette-4.webp"
+      ],
+      "layout": "wide"
+    },
+    {
+      "slug": "table-hote-maison-privee",
+      "title": "Table d’hôte en maison privée",
+      "category": "prive",
+      "description": "Une maison transformée pour accueillir, partager et composer autour de la table.",
+      "cover": "assets/projects/04-table-hote/04-vue-3d-3.webp",
+      "images": [
+        "assets/projects/04-table-hote/04-vue-3d-3.webp",
+        "assets/projects/04-table-hote/05-vue-3d-4.webp",
+        "assets/projects/04-table-hote/03-vue-3d-12.webp",
+        "assets/projects/04-table-hote/06-vue-3d-5.webp",
+        "assets/projects/04-table-hote/07-vue-3d-8.webp",
+        "assets/projects/04-table-hote/08-vue-3d-9-nuit.webp",
+        "assets/projects/04-table-hote/09-vue-3d-nature.webp",
+        "assets/projects/04-table-hote/01-maquette-3.webp",
+        "assets/projects/04-table-hote/02-maquette.webp"
+      ],
+      "layout": "wide"
+    },
+    {
+      "slug": "tiers-lieu",
+      "title": "Aménagement d’un tiers-lieu",
+      "category": "public",
+      "description": "Un espace collectif pensé pour se rencontrer, travailler et inventer de nouveaux usages.",
+      "cover": "assets/projects/05-tiers-lieu/04-3d-centre-1.webp",
+      "images": [
+        "assets/projects/05-tiers-lieu/04-3d-centre-1.webp",
+        "assets/projects/05-tiers-lieu/06-3d-entree-1.webp",
+        "assets/projects/05-tiers-lieu/03-3d-casier.webp",
+        "assets/projects/05-tiers-lieu/05-3d-couloir-2.webp",
+        "assets/projects/05-tiers-lieu/07-3d-filet.webp",
+        "assets/projects/05-tiers-lieu/08-3d-vue-dessus-2.webp",
+        "assets/projects/05-tiers-lieu/09-planche-ambi.webp",
+        "assets/projects/05-tiers-lieu/01-20260205-094615.webp",
+        "assets/projects/05-tiers-lieu/02-20260608-175713.webp"
+      ],
+      "layout": "tall"
+    },
+    {
+      "slug": "maison-unifamiliale",
+      "title": "Maison unifamiliale",
+      "category": "prive",
+      "description": "Une habitation conçue autour des habitudes, de la lumière et de la continuité des espaces.",
+      "cover": "assets/projects/06-maison-unifamiliale/05-3d-salon-cuisine.webp",
+      "images": [
+        "assets/projects/06-maison-unifamiliale/05-3d-salon-cuisine.webp",
+        "assets/projects/06-maison-unifamiliale/04-3d-salon-1.webp",
+        "assets/projects/06-maison-unifamiliale/01-3d-bureau.webp",
+        "assets/projects/06-maison-unifamiliale/02-3d-chambre-lit.webp",
+        "assets/projects/06-maison-unifamiliale/03-3d-chambre.webp",
+        "assets/projects/06-maison-unifamiliale/06-3dchambre-parentale.webp",
+        "assets/projects/06-maison-unifamiliale/07-sdb-2.webp"
+      ],
+      "layout": "wide"
+    },
+    {
+      "slug": "tables-gigognes",
+      "title": "Tables gigognes",
+      "category": "prive",
+      "description": "Un ensemble de mobilier modulable, pensé pour accompagner différents moments de la vie quotidienne.",
+      "cover": "",
+      "images": [],
+      "layout": "square"
+    },
+    {
+      "slug": "lampe",
+      "title": "Lampe",
+      "category": "prive",
+      "description": "Un objet lumineux à la fois fonctionnel et sculptural.",
+      "cover": "",
+      "images": [],
+      "layout": "portrait"
+    }
+  ]
+}
