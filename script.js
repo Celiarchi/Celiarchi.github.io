@@ -12,6 +12,7 @@ menuToggle?.addEventListener('click', () => { const isOpen = navigation.classLis
 navigation?.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => { navigation.classList.remove('is-open'); menuToggle?.setAttribute('aria-expanded', 'false'); if (menuToggle) menuToggle.lastChild.textContent = ' +'; }));
 
 function applySiteContent(site) {
+  if (site.name) document.title = document.title.replace('Célia', site.name);
   document.querySelectorAll('[data-site]').forEach((element) => { const value = site[element.dataset.site]; if (value !== undefined) element.textContent = value; });
   document.querySelectorAll('[data-site-image]').forEach((element) => { const value = site[element.dataset.siteImage]; if (value) element.src = encodeURI(value); });
   document.querySelectorAll('[data-site-href]').forEach((element) => { const value = site[element.dataset.siteHref]; if (value && element.dataset.siteHref === 'email') element.href = `mailto:${value}`; });
