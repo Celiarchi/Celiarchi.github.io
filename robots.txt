@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://celiarchi.github.io/sitemap.xml
