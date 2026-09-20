@@ -2,7 +2,7 @@ const topbar = document.querySelector('.topbar');
 const menuToggle = document.querySelector('.menu-toggle');
 const navigation = document.querySelector('.navigation');
 const page = document.body.dataset.page;
-document.head.insertAdjacentHTML('beforeend', '<link rel="stylesheet" href="dynamic.css">');
+document.head.insertAdjacentHTML('beforeend', '<link rel="stylesheet" href="dynamic.css"><link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="manifest" href="site.webmanifest"><meta name="theme-color" content="#7f2c35">');
 
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' })[character]);
 const getJson = async (path) => { const response = await fetch(path); if (!response.ok) throw new Error('Contenu indisponible'); return response.json(); };
