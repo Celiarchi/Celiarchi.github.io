@@ -20,8 +20,9 @@ function applySiteContent(site) {
 
 function categoryLabel(category) { return category === 'public' ? 'Public' : 'Privé'; }
 function projectCard(project) {
-  const image = project.cover ? `<img src="${encodeURI(project.cover)}" alt="${escapeHtml(project.title)}" />` : '<span class="project-image__empty">Image à ajouter</span>';
-  return `<a class="project-card project-card--${escapeHtml(project.layout || 'wide')}" data-category="${escapeHtml(project.category)}" href="project.html?slug=${encodeURIComponent(project.slug)}"><div class="project-image">${image}</div><div class="project-meta"><span>${categoryLabel(project.category)}</span><span>${escapeHtml(project.description)}</span><span class="project-arrow">↗</span></div><h2>${escapeHtml(project.title)}</h2></a>`;
+  const image = project.cover ? `<img src="${encodeURI(project.cover)}" alt="${escapeHtml(project.title)}" loading="lazy" decoding="async" />` : '<span class="project-image__empty">Image à ajouter</span>';
+  const cutout = project.coverKind === 'cutout' ? ' project-card--cutout' : '';
+  return `<a class="project-card project-card--${escapeHtml(project.layout || 'wide')}${cutout}" data-category="${escapeHtml(project.category)}" href="project.html?slug=${encodeURIComponent(project.slug)}"><div class="project-image">${image}</div><div class="project-meta"><span>${categoryLabel(project.category)}</span><span>${escapeHtml(project.description)}</span><span class="project-arrow">↗</span></div><h2>${escapeHtml(project.title)}</h2></a>`;
 }
 function renderProjects(projects) {
   const grid = document.querySelector('#projects-grid'); if (!grid) return;
@@ -33,10 +34,10 @@ function renderProjectPage(project) {
   if (!project) { content.innerHTML = '<section class="project-copy"><p class="eyebrow">Projet introuvable</p><div><p class="lead">Ce projet n’existe pas encore.</p><p><a href="projets.html">Retour aux projets</a></p></div></section>'; return; }
   content.className = `project-layout project-layout--${project.layout || 'wide'}`;
   document.title = `${project.title} — May’in`;
-  const hero = project.cover ? `<img src="${encodeURI(project.cover)}" alt="${escapeHtml(project.title)}" />` : '<div class="project-hero__empty">Image à ajouter</div>';
+  const hero = project.cover ? `<img class="project-hero__image${project.coverKind === 'cutout' ? ' project-hero__image--cutout' : ''}" src="${encodeURI(project.cover)}" alt="${escapeHtml(project.title)}" fetchpriority="high" />` : '<div class="project-hero__empty">Image à ajouter</div>';
   const media = (project.media || []).map((item, index) => {
     const placement = ['left', 'right', 'center'][index % 3];
-    return `<figure class="project-media project-media--${escapeHtml(item.kind || 'wide')} project-media--${placement}"><img src="${encodeURI(item.src)}" alt="${escapeHtml(item.alt || `Vue du projet ${project.title}`)}" loading="lazy" /><figcaption>${escapeHtml(item.caption || 'Légende à compléter')}</figcaption></figure>`;
+    return `<figure class="project-media project-media--${escapeHtml(item.kind || 'wide')} project-media--${placement} project-media--${escapeHtml(item.format || 'landscape')}"><img src="${encodeURI(item.src)}" alt="${escapeHtml(item.alt || `Vue du projet ${project.title}`)}" loading="lazy" decoding="async" /><figcaption>${escapeHtml(item.caption || '')}</figcaption></figure>`;
   }).join('');
   content.innerHTML = `<section class="project-hero"><a class="project-back" href="projets.html">← Tous les projets</a><p class="eyebrow">Projet ${categoryLabel(project.category)}</p><h1>${escapeHtml(project.title)}</h1>${hero}</section><section class="project-copy"><p class="eyebrow">En bref</p><div><p class="lead">${escapeHtml(project.description)}</p></div></section><section class="project-gallery">${media}<a href="projets.html" class="large-link">Tous les projets <span>↗</span></a></section>`;
 }

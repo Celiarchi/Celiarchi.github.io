@@ -53,11 +53,17 @@ collections:
                 options: ["prive", "public"]
               - { label: "Courte description", name: "description", widget: "text" }
               - { label: "Image de couverture", name: "cover", widget: "image", required: false }
+              - { label: "Type de couverture", name: "coverKind", widget: "select", options: ["photo", "cutout"], default: "photo" }
               - label: "Images du projet"
-                name: "images"
+                name: "media"
                 widget: "list"
                 required: false
-                field: { label: "Image", name: "image", widget: "image" }
+                fields:
+                  - { label: "Image", name: "src", widget: "image" }
+                  - { label: "Description accessible", name: "alt", widget: "string" }
+                  - { label: "Légende", name: "caption", widget: "string", required: false }
+                  - { label: "Présentation", name: "kind", widget: "select", options: ["wide", "detail", "process", "cutout", "plan"], default: "wide" }
+                  - { label: "Orientation", name: "format", widget: "select", options: ["landscape", "portrait"], default: "landscape" }
               - label: "Mise en page"
                 name: "layout"
                 widget: "select"
