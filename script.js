@@ -12,10 +12,10 @@ menuToggle?.addEventListener('click', () => { const isOpen = navigation.classLis
 navigation?.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => { navigation.classList.remove('is-open'); menuToggle?.setAttribute('aria-expanded', 'false'); if (menuToggle) menuToggle.lastChild.textContent = ' +'; }));
 
 function applySiteContent(site) {
-  if (site.name) document.title = document.title.replace('Célia', site.name);
-  document.querySelectorAll('[data-site]').forEach((element) => { const value = site[element.dataset.site]; if (value !== undefined) element.textContent = value; });
+  if (site.name) document.title = document.title.replace(/Célia|Celiarchi/g, site.name);
+  document.querySelectorAll('[data-site]').forEach((element) => { const value = site[element.dataset.site]; if (value !== undefined) { element.textContent = value; element.hidden = value === ''; } });
   document.querySelectorAll('[data-site-image]').forEach((element) => { const value = site[element.dataset.siteImage]; if (value) element.src = encodeURI(value); });
-  document.querySelectorAll('[data-site-href]').forEach((element) => { const value = site[element.dataset.siteHref]; if (element.dataset.siteHref === 'email') { if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value || '')) element.href = `mailto:${value}`; else element.removeAttribute('href'); } });
+  document.querySelectorAll('[data-site-href]').forEach((element) => { const value = site[element.dataset.siteHref]; if (element.dataset.siteHref === 'email') { if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value || '')) element.href = `mailto:${value}`; else { element.removeAttribute('href'); element.hidden = true; } } });
 }
 
 function categoryLabel(category) { return category === 'public' ? 'Public' : 'Privé'; }
@@ -32,10 +32,10 @@ function renderProjectPage(project) {
   const content = document.querySelector('#project-page-content'); if (!content) return;
   if (!project) { content.innerHTML = '<section class="project-copy"><p class="eyebrow">Projet introuvable</p><div><p class="lead">Ce projet n’existe pas encore.</p><p><a href="projets.html">Retour aux projets</a></p></div></section>'; return; }
   content.className = `project-layout project-layout--${project.layout || 'wide'}`;
-  document.title = `${project.title} — Celiarchi`;
+  document.title = `${project.title} — May’in`;
   const hero = project.cover ? `<img src="${encodeURI(project.cover)}" alt="${escapeHtml(project.title)}" />` : '<div class="project-hero__empty">Image à ajouter</div>';
-  const images = (project.images || []).slice(1).map((image) => `<img src="${encodeURI(image)}" alt="Vue du projet ${escapeHtml(project.title)}" />`).join('');
-  content.innerHTML = `<section class="project-hero"><p class="eyebrow">Projet ${categoryLabel(project.category)}</p><h1>${escapeHtml(project.title)}</h1>${hero}</section><section class="project-copy"><p class="eyebrow">Intention</p><div><p class="lead">${escapeHtml(project.description)}</p><p>Ce texte est une première proposition. Il pourra être remplacé dans l’administration par la présentation complète du projet, les choix de matériaux, les plans ou les recherches.</p></div></section><section class="project-gallery">${images}<a href="projets.html" class="large-link">Tous les projets <span>↗</span></a></section>`;
+  const media = (project.media || []).map((item, index) => `<figure class="project-media project-media--${escapeHtml(item.kind || 'wide')} project-media--${index % 2 ? 'offset' : 'flush'}"><img src="${encodeURI(item.src)}" alt="${escapeHtml(item.alt || `Vue du projet ${project.title}`)}" loading="lazy" /></figure>`).join('');
+  content.innerHTML = `<section class="project-hero"><p class="eyebrow">Projet ${categoryLabel(project.category)}</p><h1>${escapeHtml(project.title)}</h1>${hero}</section><section class="project-copy"><p class="eyebrow">En bref</p><div><p class="lead">${escapeHtml(project.description)}</p></div></section><section class="project-gallery">${media}<a href="projets.html" class="large-link">Tous les projets <span>↗</span></a></section>`;
 }
 
 Promise.all([getJson('content/site.json'), getJson('content/projects.json')]).then(([site, projectData]) => { applySiteContent(site); if (page === 'projects') renderProjects(projectData.projects); if (page === 'project') renderProjectPage(projectData.projects.find((project) => project.slug === new URLSearchParams(location.search).get('slug'))); }).catch(() => { const target = document.querySelector('#projects-grid, #project-page-content'); if (target) target.innerHTML = '<p class="content-error">Le contenu est temporairement indisponible.</p>'; });
