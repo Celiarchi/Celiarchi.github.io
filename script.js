@@ -34,7 +34,10 @@ function renderProjectPage(project) {
   content.className = `project-layout project-layout--${project.layout || 'wide'}`;
   document.title = `${project.title} — May’in`;
   const hero = project.cover ? `<img src="${encodeURI(project.cover)}" alt="${escapeHtml(project.title)}" />` : '<div class="project-hero__empty">Image à ajouter</div>';
-  const media = (project.media || []).map((item, index) => `<figure class="project-media project-media--${escapeHtml(item.kind || 'wide')} project-media--${index % 2 ? 'offset' : 'flush'}"><img src="${encodeURI(item.src)}" alt="${escapeHtml(item.alt || `Vue du projet ${project.title}`)}" loading="lazy" /></figure>`).join('');
+  const media = (project.media || []).map((item, index) => {
+    const placement = ['left', 'right', 'center'][index % 3];
+    return `<figure class="project-media project-media--${escapeHtml(item.kind || 'wide')} project-media--${placement}"><img src="${encodeURI(item.src)}" alt="${escapeHtml(item.alt || `Vue du projet ${project.title}`)}" loading="lazy" /><figcaption>${escapeHtml(item.caption || 'Légende à compléter')}</figcaption></figure>`;
+  }).join('');
   content.innerHTML = `<section class="project-hero"><p class="eyebrow">Projet ${categoryLabel(project.category)}</p><h1>${escapeHtml(project.title)}</h1>${hero}</section><section class="project-copy"><p class="eyebrow">En bref</p><div><p class="lead">${escapeHtml(project.description)}</p></div></section><section class="project-gallery">${media}<a href="projets.html" class="large-link">Tous les projets <span>↗</span></a></section>`;
 }
 
