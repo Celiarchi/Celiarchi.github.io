@@ -1,18 +1,71 @@
 {
+  "schemaVersion": 2,
   "name": "May’in",
   "role": "Architecture intérieure · Design · Scénographie",
+  "domain": "https://may-in.github.io",
+  "seoTitle": "May’in — Architecture intérieure, design et scénographie",
+  "seoDescription": "Découvrez les projets d’architecture intérieure, de design et de scénographie de May’in.",
+  "socialImage": "assets/social-preview.png",
   "heroImage": "assets/projects/03-patisserie/05-vue-1.webp",
   "intro": "Architecture intérieure · Design · Scénographie",
+  "homeAboutLabel": "Intention",
   "homeAboutTitle": "Des lieux pensés à partir de leurs usages.",
   "homeAboutText": "Chaque projet commence par le lieu, ses contraintes et l’attention portée à celles et ceux qui vont l’habiter.",
+  "homeProjectsLabel": "Voir les projets",
+  "projectsEyebrow": "Sélection",
+  "projectsTitle": "Projets",
+  "aboutEyebrow": "À propos",
   "aboutTitle": "À propos de May’in.",
   "aboutLead": "Un espace pour présenter un parcours, des études et une manière personnelle de concevoir les lieux.",
   "aboutLeft": "J’imagine des lieux où volumes, matières et usages se répondent avec justesse.",
   "aboutRight": "Le récit personnel, les études et les influences pourront être ajoutés ici avec les mots de la créatrice.",
+  "galleryEyebrow": "Regards",
+  "galleryPageTitle": "Galerie",
   "galleryTitle": "Visites, matières et photographies personnelles.",
   "galleryText": "Cette page accueillera des images accompagnées d’une courte légende et, si nécessaire, de leur source.",
+  "contactEyebrow": "Contact",
   "contactTitle": "Parlons de votre projet.",
   "email": "",
+  "phone": "",
   "contactDetails": "Coordonnées à venir",
-  "socials": ""
+  "socials": "",
+  "navigation": [
+    { "label": "Accueil", "href": "index.html", "visible": true },
+    { "label": "Projets", "href": "projets.html", "visible": true },
+    { "label": "Galerie", "href": "galerie.html", "visible": true },
+    { "label": "À propos", "href": "a-propos.html", "visible": true },
+    { "label": "Contact", "href": "contact.html", "visible": true }
+  ],
+  "socialLinks": [],
+  "gallery": {
+    "categories": ["Visites", "Inspirations", "Matériaux", "Photographies personnelles"],
+    "items": []
+  },
+  "customBlocks": {
+    "home": [],
+    "projects": [],
+    "gallery": [],
+    "about": [],
+    "contact": []
+  },
+  "design": {
+    "activePalette": "bordeaux",
+    "activeTypography": "editorial",
+    "palettes": [
+      { "id": "bordeaux", "name": "Bordeaux actuel", "ink": "#2a1718", "accent": "#7f2c35", "paper": "#f3ede3", "muted": "#8d7c72", "soft": "#d8c9b9" },
+      { "id": "sauge", "name": "Sauge & argile", "ink": "#263029", "accent": "#6f7d68", "paper": "#f2eee4", "muted": "#7d776c", "soft": "#d9d7c7" },
+      { "id": "encre", "name": "Encre & ivoire", "ink": "#151719", "accent": "#485660", "paper": "#f4f1ea", "muted": "#777777", "soft": "#d8d9d6" },
+      { "id": "terre", "name": "Terre cuite", "ink": "#2d201c", "accent": "#a44f38", "paper": "#f4eadc", "muted": "#89756a", "soft": "#dfc5ad" },
+      { "id": "olive", "name": "Olive profonde", "ink": "#20251e", "accent": "#59633e", "paper": "#eee9dc", "muted": "#7b7768", "soft": "#d2d0b9" }
+    ],
+    "typographies": [
+      { "id": "editorial", "name": "Éditoriale", "serif": "Instrument Serif", "sans": "DM Sans", "mono": "DM Mono" },
+      { "id": "classique", "name": "Classique", "serif": "Cormorant Garamond", "sans": "DM Sans", "mono": "DM Mono" },
+      { "id": "contemporaine", "name": "Contemporaine", "serif": "DM Sans", "sans": "DM Sans", "mono": "DM Mono" }
+    ]
+  },
+  "admin": {
+    "apiBase": "https://mayin-admin.maycelia29.workers.dev",
+    "repository": "May-in/may-in.github.io"
+  }
 }
