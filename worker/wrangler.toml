@@ -10,3 +10,7 @@ GITHUB_REPO = "may-in.github.io"
 GITHUB_BRANCH = "main"
 GITHUB_CLIENT_ID = "Iv23ligabcZtU6SgX5nu"
 ALLOWED_GITHUB_LOGIN = "Celiarchi"
+
+[[kv_namespaces]]
+binding = "STUDIO_DATA"
+id = "9b2ced5f8b83456d8ffa3084b4f25225"

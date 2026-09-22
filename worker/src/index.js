@@ -19,10 +19,14 @@ async function route(request, env) {
   if (url.pathname === '/health') return responseJson({ ok: true, service: 'May’in Studio' }, 200, request, env);
   if (url.pathname === '/auth/login' && request.method === 'GET') return beginLogin(request, env);
   if (url.pathname === '/auth/callback' && request.method === 'GET') return finishLogin(request, env);
+  if (url.pathname === '/public/visit' && request.method === 'POST') return recordVisit(request, env);
+  if (url.pathname === '/public/message' && request.method === 'POST') return receiveMessage(request, env);
   const session = await requireSession(request, env);
   if (!session) return responseJson({ error: 'Connexion requise.' }, 401, request, env);
   if (url.pathname === '/auth/me' && request.method === 'GET') return responseJson({ user: { login: session.login, avatar: session.avatar }, csrf: session.csrf }, 200, request, env);
   if (url.pathname === '/api/content' && request.method === 'GET') return readContent(request, env, session);
+  if (url.pathname === '/api/dashboard' && request.method === 'GET') return readDashboard(request, env);
+  if (url.pathname === '/api/messages' && request.method === 'GET') return readMessages(request, env);
   if (url.pathname === '/api/publish' && request.method === 'POST') {
     if (request.headers.get('X-Mayin-CSRF') !== session.csrf) return responseJson({ error: 'Session invalide.' }, 403, request, env);
     return publishContent(request, env, session);
@@ -72,6 +76,54 @@ async function requireSession(request, env) {
   const session = await unseal(sealed, env.COOKIE_SECRET);
   if (!session || session.exp < Date.now() || String(session.login).toLowerCase() !== String(env.ALLOWED_GITHUB_LOGIN).toLowerCase()) return null;
   return session;
+}
+
+function publicRequestAllowed(request, env) {
+  const origin = request.headers.get('Origin');
+  return !origin || origin === env.SITE_ORIGIN;
+}
+function monthKey(date = new Date()) { return date.toISOString().slice(0, 7); }
+function topEntries(entries, limit = 6) { return Object.entries(entries || {}).sort((a, b) => b[1] - a[1]).slice(0, limit).map(([label, value]) => ({ label, value })); }
+function deviceType(ua = '') { return /tablet|ipad/i.test(ua) ? 'Tablette' : /mobi|android|iphone/i.test(ua) ? 'Mobile' : 'Ordinateur'; }
+function botName(ua = '') { if (/googlebot/i.test(ua)) return 'Googlebot'; if (/bingbot/i.test(ua)) return 'Bingbot'; if (/facebookexternalhit/i.test(ua)) return 'Facebook'; if (/linkedinbot/i.test(ua)) return 'LinkedIn'; return /bot|crawler|spider|slurp|preview/i.test(ua) ? 'Autre robot' : ''; }
+function increment(target, key) { if (!key) return; target[key] = (target[key] || 0) + 1; }
+
+async function recordVisit(request, env) {
+  if (!env.STUDIO_DATA || !publicRequestAllowed(request, env)) return responseJson({ ok: true }, 204, request, env);
+  const payload = await request.json().catch(() => ({}));
+  const path = String(payload.path || '/').slice(0, 160);
+  const referer = String(payload.referer || 'Direct').replace(/^https?:\/\//, '').split('/')[0].slice(0, 100) || 'Direct';
+  const ua = request.headers.get('User-Agent') || ''; const bot = botName(ua); const country = request.cf?.country || 'Inconnu';
+  const city = request.cf?.city || ''; const key = `analytics:${monthKey()}`;
+  const stats = JSON.parse(await env.STUDIO_DATA.get(key) || '{"totals":{"human":0,"bots":0},"paths":{},"referers":{},"countries":{},"cities":{},"devices":{},"bots":{}}');
+  if (bot) { stats.totals.bots++; increment(stats.bots, bot); }
+  else { stats.totals.human++; increment(stats.paths, path); increment(stats.referers, referer); increment(stats.countries, country); increment(stats.cities, city); increment(stats.devices, deviceType(ua)); }
+  stats.updatedAt = new Date().toISOString();
+  await env.STUDIO_DATA.put(key, JSON.stringify(stats), { expirationTtl: 400 * 24 * 60 * 60 });
+  return responseJson({ ok: true }, 200, request, env);
+}
+
+async function receiveMessage(request, env) {
+  if (!env.STUDIO_DATA || !publicRequestAllowed(request, env)) return responseJson({ error: 'Service indisponible.' }, 503, request, env);
+  const body = await request.json().catch(() => ({}));
+  if (body.website) return responseJson({ ok: true }, 200, request, env);
+  const name = String(body.name || '').trim().slice(0, 80); const email = String(body.email || '').trim().slice(0, 150); const message = String(body.message || '').trim().slice(0, 600);
+  if (message.length < 8) return responseJson({ error: 'Écris un message un peu plus détaillé.' }, 400, request, env);
+  const id = `${Date.now()}-${randomToken(6)}`;
+  await env.STUDIO_DATA.put(`message:${id}`, JSON.stringify({ id, name, email, message, createdAt: new Date().toISOString(), country: request.cf?.country || '' }), { expirationTtl: 180 * 24 * 60 * 60 });
+  return responseJson({ ok: true }, 201, request, env);
+}
+
+async function readDashboard(request, env) {
+  const stats = env.STUDIO_DATA ? JSON.parse(await env.STUDIO_DATA.get(`analytics:${monthKey()}`) || '{"totals":{"human":0,"bots":0},"paths":{},"referers":{},"countries":{},"cities":{},"devices":{},"bots":{}}') : { totals: { human: 0, bots: 0 } };
+  return responseJson({ month: monthKey(), human: stats.totals?.human || 0, bots: stats.totals?.bots || 0, paths: topEntries(stats.paths), referers: topEntries(stats.referers), countries: topEntries(stats.countries), cities: topEntries(stats.cities), devices: topEntries(stats.devices), botTypes: topEntries(stats.bots), updatedAt: stats.updatedAt || null }, 200, request, env);
+}
+
+async function readMessages(request, env) {
+  if (!env.STUDIO_DATA) return responseJson({ messages: [] }, 200, request, env);
+  const listed = await env.STUDIO_DATA.list({ prefix: 'message:', limit: 50 });
+  const messages = (await Promise.all(listed.keys.map(async ({ name }) => JSON.parse(await env.STUDIO_DATA.get(name) || 'null')))).filter(Boolean).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return responseJson({ messages }, 200, request, env);
 }
 
 async function readContent(request, env, session) {

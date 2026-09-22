@@ -49,7 +49,7 @@
       <span class="save-state" id="save-state">À jour</span>
       <button class="button button--quiet" id="preview-public">Voir le site ↗</button>
       <button class="button button--primary" id="publish">Publier</button>
-      <button class="avatar" id="account-button" aria-label="Se déconnecter du Studio">M</button>
+      <div class="account-wrap"><button class="avatar" id="account-button" aria-label="Ouvrir les options du compte" aria-expanded="false">M</button><div class="account-menu" id="account-menu" hidden><div class="account-menu__identity"><img id="account-avatar" alt="" /><span><strong id="account-name">Administratrice</strong><small>Accès administrateur</small></span></div><button data-account-action="site">Voir le site</button><button data-account-action="dashboard">Tableau de bord</button><button data-account-action="draft">Brouillon local</button><button data-account-action="logout" class="account-menu__logout">Se déconnecter</button></div></div>
     </header>
 
     <aside class="sidebar sidebar--left">
@@ -60,6 +60,7 @@
         <div class="project-list" id="project-list"></div>
       </div>
       <div class="sidebar-section">
+        <button class="sidebar-action" data-panel="dashboard">◔ Tableau de bord</button>
         <button class="sidebar-action" data-panel="gallery">▦ Galerie</button>
         <button class="sidebar-action" data-panel="navigation">≡ Navigation & liens</button>
         <button class="sidebar-action" data-panel="design">◐ Design & palettes</button>

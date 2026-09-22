@@ -229,6 +229,27 @@ function renderCustomBlocks(site) {
   });
 }
 
+let telemetryStarted = false;
+function studioApi(site, path) { return `${String(site.admin?.apiBase || '').replace(/\/$/, '')}${path}`; }
+function startAnonymousAnalytics(site) {
+  if (isAdminPreview || telemetryStarted || !site.admin?.analyticsEnabled || !site.admin?.apiBase) return;
+  telemetryStarted = true;
+  const payload = JSON.stringify({ path: `${location.pathname}${location.search}`, referer: document.referrer || 'Direct' });
+  const endpoint = studioApi(site, '/public/visit');
+  if (navigator.sendBeacon) navigator.sendBeacon(endpoint, new Blob([payload], { type: 'text/plain' }));
+  else fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: payload, keepalive: true }).catch(() => {});
+}
+function renderContactForm(site) {
+  if (page !== 'contact' || isAdminPreview || document.querySelector('#mayin-contact-form') || !site.admin?.contactFormEnabled || !site.admin?.apiBase) return;
+  const target = document.querySelector('.contact-main'); if (!target) return;
+  target.insertAdjacentHTML('beforeend', `<section class="contact-form"><p class="eyebrow">Message rapide</p><p>Pour une première prise de contact, laisse un court message. Pour un échange détaillé, l’e-mail reste préférable.</p><form id="mayin-contact-form"><label>Prénom ou nom<input name="name" maxlength="80" autocomplete="name" /></label><label>E-mail <span>(facultatif)</span><input name="email" type="email" maxlength="150" autocomplete="email" /></label><label>Votre message<textarea name="message" minlength="8" maxlength="600" required></textarea></label><input class="contact-form__trap" name="website" tabindex="-1" autocomplete="off" /><button type="submit">Envoyer le message <span>↗</span></button><p class="contact-form__status" role="status"></p></form></section>`);
+  const form = document.querySelector('#mayin-contact-form'); const status = form.querySelector('.contact-form__status');
+  form.addEventListener('submit', async (event) => { event.preventDefault(); const fields = new FormData(form); const button = form.querySelector('button'); button.disabled = true; status.textContent = 'Envoi…';
+    try { const response = await fetch(studioApi(site, '/public/message'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(fields)) }); const result = await response.json(); if (!response.ok) throw new Error(result.error); form.reset(); status.textContent = 'Message envoyé. Merci.'; }
+    catch (error) { status.textContent = error.message || 'Envoi impossible pour le moment.'; } finally { button.disabled = false; }
+  });
+}
+
 function renderAll(site, projects) {
   runtime = { site: normaliseSite(structuredClone(site)), projects: structuredClone(projects || []) };
   applyDesign(runtime.site);
@@ -240,6 +261,8 @@ function renderAll(site, projects) {
   if (page === 'project') renderProjectPage(runtime.projects);
   if (page === 'gallery') renderGallery(runtime.site);
   renderCustomBlocks(runtime.site);
+  renderContactForm(runtime.site);
+  startAnonymousAnalytics(runtime.site);
   prepareAdminPreview();
 }
 

@@ -84,6 +84,8 @@
   },
   "admin": {
     "apiBase": "https://mayin-admin.maycelia29.workers.dev",
+    "analyticsEnabled": false,
+    "contactFormEnabled": false,
     "repository": "May-in/may-in.github.io"
   }
 }

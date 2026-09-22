@@ -5,7 +5,8 @@ const dom = {
   frame: $('#preview'), shell: $('#preview-shell'), inspector: $('#inspector'), inspectorTitle: $('#inspector-title'),
   pageList: $('#page-list'), projectList: $('#project-list'), publish: $('#publish'), undo: $('#undo'), redo: $('#redo'),
   saveState: $('#save-state'), toast: $('#toast'), imageInput: $('#image-input'), previewPublic: $('#preview-public'),
-  leftSidebar: $('.sidebar--left'), rightSidebar: $('.sidebar--right'), mobileContent: $('#mobile-content'), mobileProperties: $('#mobile-properties')
+  leftSidebar: $('.sidebar--left'), rightSidebar: $('.sidebar--right'), mobileContent: $('#mobile-content'), mobileProperties: $('#mobile-properties'),
+  accountButton: $('#account-button'), accountMenu: $('#account-menu'), accountAvatar: $('#account-avatar'), accountName: $('#account-name')
 };
 const pageDefinitions = [
   { id: 'home', label: 'Accueil', icon: '⌂', href: '../index.html?admin-preview=1' },
@@ -34,6 +35,8 @@ let inlineSessionPath = '';
 let previewMode = 'edit';
 let saveTimer = 0;
 let toastTimer = 0;
+let expandedProjectIndex = null;
+let dashboard = null;
 const siteImagePaths = new Set(['site.heroImage', 'site.socialImage']);
 
 function pathParts(path) { return path.split('.').filter(Boolean).map((part) => /^\d+$/.test(part) ? Number(part) : part); }
@@ -124,7 +127,7 @@ function renderPageList() {
   dom.pageList.innerHTML = pageDefinitions.map((item) => `<button class="page-button${item.id === activePage ? ' is-active' : ''}" data-page="${item.id}" data-href="${item.href}"><span>${item.icon}</span><span>${item.label}</span></button>`).join('');
 }
 function renderProjectList() {
-  dom.projectList.innerHTML = data.projects.map((project, index) => { const cover = project.cover?.startsWith('data:') ? project.cover : `../${project.cover || 'favicon.svg'}`; return `<div class="project-row${selectedPath.startsWith(`projects.${index}`) ? ' is-active' : ''}" data-project-index="${index}"><img src="${encode(cover)}" alt="" /><span>${encode(project.title)}</span><small>${project.category === 'public' ? 'PU' : 'PR'}</small></div>`; }).join('');
+  dom.projectList.innerHTML = data.projects.map((project, index) => { const cover = project.cover?.startsWith('data:') ? project.cover : `../${project.cover || 'favicon.svg'}`; const open = expandedProjectIndex === index || selectedPath.startsWith(`projects.${index}`); return `<div class="project-tree"><button class="project-row${selectedPath.startsWith(`projects.${index}`) ? ' is-active' : ''}" data-project-index="${index}"><img src="${encode(cover)}" alt="" /><span>${encode(project.title)}</span><small>${open ? '⌄' : '›'}</small></button>${open ? `<div class="project-media-list"><button class="project-media-row" data-project-index="${index}" data-project-media-index="cover"><span>◆</span><span>Couverture</span></button>${(project.media || []).map((item, mediaIndex) => { const source = item.src?.startsWith('data:') ? item.src : `../${item.src || 'favicon.svg'}`; return `<button class="project-media-row" data-project-index="${index}" data-project-media-index="${mediaIndex}"><img src="${encode(source)}" alt="" /><span>${encode(item.caption || item.alt || `Image ${mediaIndex + 1}`)}</span></button>`; }).join('')}<button class="project-media-row project-media-row--add" data-add-project-image="${index}">+ Ajouter une image</button></div>` : ''}</div>`; }).join('');
 }
 function renderAllAdmin() { renderPageList(); renderProjectList(); renderInspector(); sendDraft(); }
 
@@ -217,6 +220,18 @@ function renderSettings() {
   dom.inspectorTitle.textContent = 'Réglages du site';
   dom.inspector.innerHTML = `<div class="form-section"><h3>Identité</h3>${field('Nom du site','site.name')}${field('Créatrice','site.creatorName')}${field('Activités','site.role')}${field('Adresse du site','site.domain','url')}</div>${imageControl('site.socialImage','Image de partage')}<div class="form-section"><h3>Référencement</h3>${field('Titre pour les moteurs de recherche','site.seoTitle')}${field('Description','site.seoDescription','textarea')}</div><div class="form-section"><h3>Libellés globaux</h3>${field('Bouton du menu','site.menuLabel')}${field('Catégorie privée','site.privateLabel')}${field('Catégorie publique','site.publicLabel')}${field('Copyright','site.copyright')}</div><div class="form-section"><h3>Contact</h3>${field('E-mail','site.email','email')}${field('Téléphone','site.phone')}${field('Coordonnées affichées','site.contactDetails','textarea')}</div><div class="form-section"><h3>Sauvegarde</h3><button class="button" data-export>Télécharger une sauvegarde JSON</button></div>`;
 }
+function statCard(label, value, note = '') { return `<article class="dashboard-card"><span>${encode(label)}</span><strong>${encode(value)}</strong>${note ? `<small>${encode(note)}</small>` : ''}</article>`; }
+function renderDashboard() {
+  dom.inspectorTitle.textContent = 'Tableau de bord';
+  const media = data.projects.reduce((total, project) => total + (project.media?.length || 0), 0);
+  const incomplete = data.projects.filter((project) => !project.cover || !project.description || !(project.media || []).length).length;
+  const stats = dashboard;
+  dom.inspector.innerHTML = `<div class="dashboard"><p class="dashboard__intro">Une vue simple de May’in : contenu, messages et fréquentation. Les chiffres sont anonymes et ne reposent sur aucun cookie.</p><div class="dashboard-grid">${statCard('Projets', data.projects.length, incomplete ? `${incomplete} à compléter` : 'Tous structurés')}${statCard('Images de projets', media, 'Hors couvertures')}${statCard('Brouillon', localStorage.getItem('mayin-studio-draft') ? 'À publier' : 'À jour', 'Conservé sur cet appareil')}</div><div class="form-section"><h3>Fréquentation · ${stats ? stats.month : 'chargement'}</h3>${stats ? `<div class="dashboard-grid">${statCard('Visites humaines', stats.human, 'Pages chargées')}${statCard('Robots détectés', stats.bots, 'Google et autres robots')}</div>${dashboardList('Pages les plus vues', stats.paths)}${dashboardList('Origine des visites', stats.referers)}${dashboardList('Pays', stats.countries)}${dashboardList('Villes approximatives', stats.cities)}${dashboardList('Appareils', stats.devices)}${dashboardList('Robots détectés', stats.botTypes)}` : '<p class="dashboard__muted">Les statistiques seront visibles ici dès les premières visites.</p>'}</div><div class="form-section"><h3>Messages reçus</h3><div id="message-list"><p class="dashboard__muted">Chargement…</p></div></div><div class="form-section"><h3>Référencement</h3><p class="dashboard__muted">La Search Console reste le bon endroit pour voir les requêtes Google, les impressions et les clics. Le Studio propose ici un accès simplifié, sans jargon.</p><a class="button" href="https://search.google.com/search-console?resource_id=https%3A%2F%2Fmay-in.github.io%2F" target="_blank" rel="noreferrer">Ouvrir Search Console ↗</a></div></div>`;
+  loadMessages();
+}
+function dashboardList(title, entries = []) { if (!entries?.length) return ''; return `<div class="dashboard-list"><h4>${encode(title)}</h4>${entries.map((item) => `<div><span>${encode(item.label)}</span><strong>${item.value}</strong></div>`).join('')}</div>`; }
+async function loadDashboard() { if (!apiBase || localMode) return; try { const response = await fetch(`${apiBase}/api/dashboard`, { headers:authHeaders() }); if (response.ok) dashboard = await response.json(); } catch {} }
+async function loadMessages() { const target = $('#message-list'); if (!target || !apiBase || localMode) return; try { const response = await fetch(`${apiBase}/api/messages`, { headers:authHeaders() }); const result = await response.json(); target.innerHTML = result.messages?.length ? result.messages.map((message) => `<article class="message-card"><strong>${encode(message.name || 'Visiteur')}</strong><small>${new Date(message.createdAt).toLocaleDateString('fr-BE')}${message.country ? ` · ${encode(message.country)}` : ''}</small><p>${encode(message.message)}</p>${message.email ? `<a href="mailto:${encode(message.email)}">${encode(message.email)}</a>` : ''}</article>`).join('') : '<p class="dashboard__muted">Aucun message pour le moment.</p>'; } catch { target.innerHTML = '<p class="dashboard__muted">Les messages seront visibles dès que le service sera publié.</p>'; } }
 function renderPagePanel(pageId) {
   const definition = pageDefinitions.find(item => item.id === pageId); dom.inspectorTitle.textContent = definition?.label || 'Page';
   const heading = pageId === 'notFound' ? 'Page 404' : `Page ${definition?.label || ''}`;
@@ -225,6 +240,7 @@ function renderPagePanel(pageId) {
 function renderEmpty() { dom.inspectorTitle.textContent = 'Propriétés'; dom.inspector.innerHTML = '<div class="empty-state"><span>✦</span><p>Sélectionne un texte, une image ou un projet dans la prévisualisation.</p></div>'; }
 function renderInspector() {
   if (activePanel === 'design') return renderDesign();
+  if (activePanel === 'dashboard') return renderDashboard();
   if (activePanel === 'navigation') return renderNavigationPanel();
   if (activePanel === 'gallery') return renderGalleryPanel();
   if (activePanel === 'settings') return renderSettings();
@@ -289,7 +305,7 @@ async function publish() {
 }
 
 function showLogin() { dom.boot.hidden = true; dom.studio.hidden = true; dom.login.hidden = false; }
-function showStudio() { dom.boot.hidden = true; dom.login.hidden = true; dom.studio.hidden = false; renderAllAdmin(); setTimeout(() => { syncPreview(); wirePreviewDocument(); }, 120); }
+function showStudio() { dom.boot.hidden = true; dom.login.hidden = true; dom.studio.hidden = false; dom.accountName.textContent = currentUser?.login || 'Administratrice'; if (currentUser?.avatar) { dom.accountAvatar.src = currentUser.avatar; dom.accountAvatar.hidden = false; } loadDashboard().then(() => { if (activePanel === 'dashboard') renderDashboard(); }); renderAllAdmin(); setTimeout(() => { syncPreview(); wirePreviewDocument(); }, 120); }
 async function loadPublicData() {
   const [site, projects] = await Promise.all([fetch('../content/site.json',{cache:'no-store'}).then(r=>r.json()), fetch('../content/projects.json',{cache:'no-store'}).then(r=>r.json())]);
   apiBase = site.admin?.apiBase || ''; return { site, projects: projects.projects };
@@ -322,7 +338,7 @@ dom.previewPublic.addEventListener('click', () => open(data.site.domain || '../i
 $$('.segmented').forEach((button) => button.addEventListener('click', () => setPreviewMode(button.dataset.mode)));
 $$('[data-viewport]').forEach((button) => button.addEventListener('click', () => { $$('[data-viewport]').forEach(item=>item.classList.toggle('is-active',item===button)); dom.shell.className = `preview-shell preview-shell--${button.dataset.viewport}`; }));
 dom.pageList.addEventListener('click', (event) => { const button=event.target.closest('[data-page]'); if (!button) return; activePanel=`page:${button.dataset.page}`; selectedPath=''; navigatePreview(button.dataset.href,button.dataset.page); renderInspector(); if(isCompact())openMobilePanel(''); });
-dom.projectList.addEventListener('click', (event) => { const row=event.target.closest('[data-project-index]'); if(!row)return; const index=Number(row.dataset.projectIndex); selectedPath=`projects.${index}`; activePanel=''; navigatePreview(`../project.html?slug=${encodeURIComponent(data.projects[index].slug)}&admin-preview=1`,'projects'); renderProjectList(); renderInspector(); if(isCompact())openMobilePanel('properties'); });
+dom.projectList.addEventListener('click', (event) => { const add=event.target.closest('[data-add-project-image]'); if(add)return startUpload({type:'project-media',index:Number(add.dataset.addProjectImage)}); const media=event.target.closest('[data-project-media-index]'); if(media){const index=Number(media.dataset.projectIndex); const mediaIndex=media.dataset.projectMediaIndex; expandedProjectIndex=index; selectedPath=mediaIndex === 'cover' ? `projects.${index}.cover` : `projects.${index}.media.${mediaIndex}`; activePanel=''; renderProjectList(); renderInspector(); return;} const row=event.target.closest('[data-project-index]'); if(!row)return; const index=Number(row.dataset.projectIndex); expandedProjectIndex = expandedProjectIndex === index ? null : index; selectedPath=`projects.${index}`; activePanel=''; navigatePreview(`../project.html?slug=${encodeURIComponent(data.projects[index].slug)}&admin-preview=1`,'projects'); renderProjectList(); renderInspector(); if(isCompact())openMobilePanel('properties'); });
 $$('[data-panel]').forEach((button) => button.addEventListener('click', () => { activePanel=button.dataset.panel; selectedPath=''; renderInspector(); revealInspector(); }));
 $('#add-project').addEventListener('click', () => { pushHistory(); const number=data.projects.length+1; data.projects.push({slug:`nouveau-projet-${number}`,title:`Nouveau projet ${number}`,category:'prive',description:'Description du projet à compléter.',cover:'',coverKind:'photo',coverRadius:'soft',layout:'wide',media:[],blocks:[]}); selectedPath=`projects.${data.projects.length-1}`; activePanel=''; markChanged(); });
 $('#collapse-left').addEventListener('click', () => {
@@ -335,7 +351,9 @@ $('#collapse-left').addEventListener('click', () => {
 $('#close-inspector').addEventListener('click', () => { renderEmpty(); if(isCompact())openMobilePanel(''); });
 dom.mobileContent.addEventListener('click', () => openMobilePanel(dom.leftSidebar.classList.contains('is-open') ? '' : 'content'));
 dom.mobileProperties.addEventListener('click', () => openMobilePanel(dom.rightSidebar.classList.contains('is-open') ? '' : 'properties'));
-$('#account-button').addEventListener('click', () => { if (localMode) return showToast('Mode local'); sessionStorage.removeItem('mayin-session'); sessionToken=''; location.reload(); });
+dom.accountButton.addEventListener('click', () => { const open = dom.accountMenu.hidden; dom.accountMenu.hidden = !open; dom.accountButton.setAttribute('aria-expanded', String(open)); });
+document.addEventListener('click', (event) => { if (!event.target.closest('.account-wrap')) { dom.accountMenu.hidden = true; dom.accountButton.setAttribute('aria-expanded', 'false'); } });
+dom.accountMenu.addEventListener('click', (event) => { const action = event.target.closest('[data-account-action]')?.dataset.accountAction; if (!action) return; if (action === 'site') return dom.previewPublic.click(); if (action === 'dashboard') { activePanel='dashboard'; selectedPath=''; dom.accountMenu.hidden=true; renderInspector(); return; } if (action === 'draft') return showToast(localStorage.getItem('mayin-studio-draft') ? 'Un brouillon est conservé sur cet appareil.' : 'Aucun brouillon en attente.'); if (action === 'logout') { if (localMode) return showToast('Mode local'); sessionStorage.removeItem('mayin-session'); sessionToken=''; location.reload(); } });
 dom.imageInput.addEventListener('change', () => handleUpload(dom.imageInput.files[0]));
 dom.inspector.addEventListener('focusin', (event) => { if (event.target.matches('[data-path]')) inlineSessionPath=''; });
 dom.inspector.addEventListener('input', (event) => { if (event.target.type === 'range') event.target.nextElementSibling.textContent=`${event.target.value}%`; });
