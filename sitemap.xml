@@ -1,8 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url><loc>https://may-in.github.io/</loc></url>
-  <url><loc>https://may-in.github.io/projets.html</loc></url>
-  <url><loc>https://may-in.github.io/a-propos.html</loc></url>
-  <url><loc>https://may-in.github.io/galerie.html</loc></url>
-  <url><loc>https://may-in.github.io/contact.html</loc></url>
+  <url><loc>https://may-in.github.io/</loc><lastmod>2026-09-22</lastmod><priority>1.0</priority></url>
+  <url><loc>https://may-in.github.io/projets.html</loc><lastmod>2026-09-22</lastmod><priority>0.9</priority></url>
+  <url><loc>https://may-in.github.io/a-propos.html</loc><lastmod>2026-09-22</lastmod><priority>0.7</priority></url>
+  <url><loc>https://may-in.github.io/galerie.html</loc><lastmod>2026-09-22</lastmod><priority>0.6</priority></url>
+  <url><loc>https://may-in.github.io/contact.html</loc><lastmod>2026-09-22</lastmod><priority>0.6</priority></url>
+  <url><loc>https://may-in.github.io/project.html?slug=kot-etudiant</loc><lastmod>2026-09-22</lastmod></url>
+  <url><loc>https://may-in.github.io/project.html?slug=moooi-stand-commercial</loc><lastmod>2026-09-22</lastmod></url>
+  <url><loc>https://may-in.github.io/project.html?slug=amenagement-patisserie</loc><lastmod>2026-09-22</lastmod></url>
+  <url><loc>https://may-in.github.io/project.html?slug=table-hote-maison-privee</loc><lastmod>2026-09-22</lastmod></url>
+  <url><loc>https://may-in.github.io/project.html?slug=tiers-lieu</loc><lastmod>2026-09-22</lastmod></url>
+  <url><loc>https://may-in.github.io/project.html?slug=maison-unifamiliale</loc><lastmod>2026-09-22</lastmod></url>
+  <url><loc>https://may-in.github.io/project.html?slug=tables-gigognes</loc><lastmod>2026-09-22</lastmod></url>
+  <url><loc>https://may-in.github.io/project.html?slug=lampe</loc><lastmod>2026-09-22</lastmod></url>
+  <url><loc>https://may-in.github.io/project.html?slug=scenographie-minimaliste</loc><lastmod>2026-09-22</lastmod></url>
+  <url><loc>https://may-in.github.io/project.html?slug=scenographie-personnelle</loc><lastmod>2026-09-22</lastmod></url>
 </urlset>

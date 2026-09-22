@@ -13,6 +13,11 @@ const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (character)
 const getJson = async (path) => { const response = await fetch(path, { cache: 'no-store' }); if (!response.ok) throw new Error('Contenu indisponible'); return response.json(); };
 const assetSrc = (value = '') => String(value).startsWith('data:') || String(value).startsWith('blob:') ? value : encodeURI(value);
 const safeToken = (value, fallback) => /^[a-z0-9-]+$/i.test(String(value || '')) ? String(value) : fallback;
+function upsertMeta(attribute, key, content) {
+  let element = document.head.querySelector(`meta[${attribute}="${key}"]`);
+  if (!element) { element = document.createElement('meta'); element.setAttribute(attribute, key); document.head.append(element); }
+  element.setAttribute('content', content || '');
+}
 
 addEventListener('scroll', () => topbar?.classList.toggle('is-scrolled', scrollY > 30), { passive: true });
 menuToggle?.addEventListener('click', () => { const isOpen = navigation.classList.toggle('is-open'); menuToggle.setAttribute('aria-expanded', String(isOpen)); menuToggle.lastChild.textContent = isOpen ? ' −' : ' +'; });
@@ -20,6 +25,7 @@ navigation?.addEventListener('click', (event) => { if (!event.target.closest('a'
 
 function normaliseSite(site) {
   const defaults = {
+    creatorName: 'Célia May',
     menuLabel: 'Menu', filterAllLabel: 'Tous', filterPrivateLabel: 'Privé', filterPublicLabel: 'Public',
     privateLabel: 'Privé', publicLabel: 'Public', projectBackLabel: 'Tous les projets', projectTypeLabel: 'Projet',
     projectSummaryLabel: 'En bref', projectAllLabel: 'Tous les projets', aboutContactEyebrow: 'Parlons de votre projet',
@@ -79,9 +85,13 @@ function applySiteFields(site) {
   if (site.seoDescription) document.querySelector('meta[name="description"]')?.setAttribute('content', site.seoDescription);
   if (site.domain) {
     const pagePath = location.pathname.split('/').pop() || '';
-    document.querySelector('link[rel="canonical"]')?.setAttribute('href', `${site.domain.replace(/\/$/, '')}/${pagePath}`);
-    document.querySelector('meta[property="og:url"]')?.setAttribute('content', `${site.domain.replace(/\/$/, '')}/${pagePath}`);
+    const projectSlug = page === 'project' ? new URLSearchParams(location.search).get('slug') : '';
+    const query = projectSlug ? `?slug=${encodeURIComponent(projectSlug)}` : '';
+    const canonicalUrl = `${site.domain.replace(/\/$/, '')}/${pagePath}${query}`;
+    document.querySelector('link[rel="canonical"]')?.setAttribute('href', canonicalUrl);
+    upsertMeta('property', 'og:url', canonicalUrl);
   }
+  upsertMeta('name', 'author', site.creatorName || 'Célia May');
   if (site.socialImage) {
     const socialUrl = `${site.domain.replace(/\/$/, '')}/${site.socialImage.replace(/^\//, '')}`;
     document.querySelector('meta[property="og:image"]')?.setAttribute('content', socialUrl);
@@ -112,6 +122,23 @@ function applySiteFields(site) {
       else { element.removeAttribute('href'); element.hidden = !isAdminPreview; }
     }
   });
+}
+
+function applyStructuredData(site) {
+  if (page !== 'home') return;
+  const base = (site.domain || 'https://may-in.github.io').replace(/\/$/, '');
+  const creator = site.creatorName || 'Célia May';
+  const structured = {
+    '@context': 'https://schema.org',
+    '@graph': [
+      { '@type': 'WebSite', '@id': `${base}/#website`, url: `${base}/`, name: site.name, alternateName: ['May-in', 'May In', 'Mayin'], inLanguage: 'fr-BE' },
+      { '@type': 'Organization', '@id': `${base}/#studio`, name: site.name, alternateName: ['May-in', 'May In', 'Mayin'], url: `${base}/`, logo: `${base}/favicon.svg`, image: `${base}/${String(site.socialImage || 'assets/social-preview.png').replace(/^\//, '')}`, description: site.seoDescription, founder: { '@id': `${base}/#celia-may` } },
+      { '@type': 'Person', '@id': `${base}/#celia-may`, name: creator, jobTitle: 'Architecte d’intérieur', worksFor: { '@id': `${base}/#studio` } }
+    ]
+  };
+  let node = document.querySelector('#structured-data');
+  if (!node) { node = document.createElement('script'); node.id = 'structured-data'; node.type = 'application/ld+json'; document.head.append(node); }
+  node.textContent = JSON.stringify(structured);
 }
 
 function renderSocialLinks(site) {
@@ -153,7 +180,18 @@ function renderProjectPage(projects) {
   const project = projects[projectIndex];
   if (!project) { content.innerHTML = '<section class="project-copy"><p class="eyebrow">Projet introuvable</p><div><p class="lead">Ce projet n’existe pas encore.</p><p><a href="projets.html">Retour aux projets</a></p></div></section>'; return; }
   content.className = `project-layout project-layout--${safeToken(project.layout, 'wide')}`;
-  document.title = `${project.title} — May’in`;
+  document.title = `${project.title} — ${runtime.site.name}`;
+  const projectUrl = `${runtime.site.domain.replace(/\/$/, '')}/project.html?slug=${encodeURIComponent(project.slug)}`;
+  document.querySelector('link[rel="canonical"]')?.setAttribute('href', projectUrl);
+  upsertMeta('name', 'description', `${project.title} — ${project.description}`);
+  upsertMeta('property', 'og:type', 'article');
+  upsertMeta('property', 'og:title', `${project.title} — ${runtime.site.name}`);
+  upsertMeta('property', 'og:description', project.description);
+  upsertMeta('property', 'og:url', projectUrl);
+  if (project.cover) upsertMeta('property', 'og:image', `${runtime.site.domain.replace(/\/$/, '')}/${project.cover.replace(/^\//, '')}`);
+  let projectSchema = document.querySelector('#project-structured-data');
+  if (!projectSchema) { projectSchema = document.createElement('script'); projectSchema.id = 'project-structured-data'; projectSchema.type = 'application/ld+json'; document.head.append(projectSchema); }
+  projectSchema.textContent = JSON.stringify({ '@context':'https://schema.org', '@type':'CreativeWork', name:project.title, description:project.description, url:projectUrl, image:project.cover ? `${runtime.site.domain.replace(/\/$/, '')}/${project.cover.replace(/^\//, '')}` : undefined, creator:{ '@type':'Person', name:runtime.site.creatorName || 'Célia May' }, about:['Architecture intérieure','Design','Scénographie'] });
   const heroRadius = radiusClass(project.coverRadius || 'soft');
   const hero = project.cover ? `<img class="project-hero__image${project.coverKind === 'cutout' ? ' project-hero__image--cutout' : ''} ${heroRadius}" style="${imageStyle(project)}" src="${assetSrc(project.cover)}" alt="${escapeHtml(project.title)}" fetchpriority="high" data-edit-path="projects.${projectIndex}.cover" data-edit-label="Image de couverture" />` : '<div class="project-hero__empty">Image à ajouter</div>';
   const media = (project.media || []).map((item, mediaIndex) => {
@@ -196,6 +234,7 @@ function renderAll(site, projects) {
   applyDesign(runtime.site);
   renderNavigation(runtime.site);
   applySiteFields(runtime.site);
+  applyStructuredData(runtime.site);
   renderSocialLinks(runtime.site);
   if (page === 'projects') renderProjects(runtime.projects);
   if (page === 'project') renderProjectPage(runtime.projects);
