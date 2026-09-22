@@ -149,10 +149,10 @@ async function publishContent(request, env, session) {
   const ref = await githubJson(`/repos/${owner}/${repo}/git/ref/heads/${branch}`, session.token);
   const headSha = ref.object.sha;
   const commit = await githubJson(`/repos/${owner}/${repo}/git/commits/${headSha}`, session.token);
-  const entries = [
+  const entries = /** @type {any[]} */ ([
     { path: 'content/site.json', mode: '100644', type: 'blob', content: `${JSON.stringify(payload.site, null, 2)}\n` },
     { path: 'content/projects.json', mode: '100644', type: 'blob', content: `${JSON.stringify(payload.projects, null, 2)}\n` }
-  ];
+  ]);
   for (const file of files) {
     const blob = await githubJson(`/repos/${owner}/${repo}/git/blobs`, session.token, { method: 'POST', body: JSON.stringify({ content: file.content, encoding: 'base64' }) });
     entries.push({ path: file.path, mode: '100644', type: 'blob', sha: blob.sha });
