@@ -65,22 +65,42 @@ function redo() { if (!redoStack.length) return; undoStack.push(JSON.stringify(d
 function sendDraft() {
   dom.frame.contentWindow?.postMessage({ type: 'mayin:data', site: data.site, projects: data.projects }, location.origin);
 }
+function sendPreviewMode() { dom.frame.contentWindow?.postMessage({ type: 'mayin:mode', mode: previewMode }, location.origin); }
+function syncPreview() { sendDraft(); sendPreviewMode(); }
 function setPreviewMode(mode) {
   previewMode = mode;
   $$('.segmented').forEach((button) => button.classList.toggle('is-active', button.dataset.mode === mode));
-  dom.frame.contentWindow?.postMessage({ type: 'mayin:mode', mode }, location.origin);
+  sendPreviewMode();
   $('#workspace-hint').textContent = mode === 'edit' ? 'Clique sur un élément du site pour le modifier' : 'Navigation active — utilise les liens normalement';
 }
 function wirePreviewDocument() {
   const previewDocument = dom.frame.contentDocument;
   if (!previewDocument || previewDocument.documentElement.dataset.studioWired === 'true') return;
   previewDocument.documentElement.dataset.studioWired = 'true';
-  previewDocument.addEventListener('click', (event) => {
+  let pointerStart = null;
+  let touchHandledUntil = 0;
+  const selectElement = (event) => {
     if (previewMode !== 'edit') return;
     const editable = event.target.closest?.('[data-edit-path]'); if (!editable) return;
     event.preventDefault(); event.stopPropagation();
     previewDocument.querySelectorAll('.admin-selected').forEach((item) => item.classList.remove('admin-selected'));
     editable.classList.add('admin-selected'); selectedPath = editable.dataset.editPath; activePanel = ''; renderProjectList(); renderInspector(); revealInspector();
+  };
+  previewDocument.addEventListener('pointerdown', (event) => {
+    if (event.pointerType === 'touch' || event.pointerType === 'pen') pointerStart = { x:event.clientX, y:event.clientY, id:event.pointerId };
+  }, true);
+  previewDocument.addEventListener('pointerup', (event) => {
+    if (!pointerStart || pointerStart.id !== event.pointerId) return;
+    const moved = Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y);
+    pointerStart = null;
+    if (moved > 12) return;
+    touchHandledUntil = performance.now() + 700;
+    selectElement(event);
+  }, true);
+  previewDocument.addEventListener('pointercancel', () => { pointerStart = null; }, true);
+  previewDocument.addEventListener('click', (event) => {
+    if (performance.now() < touchHandledUntil) { if (previewMode === 'edit' && event.target.closest?.('[data-edit-path]')) { event.preventDefault(); event.stopPropagation(); } return; }
+    selectElement(event);
   }, true);
   previewDocument.addEventListener('input', (event) => {
     if (previewMode !== 'edit') return;
@@ -269,7 +289,7 @@ async function publish() {
 }
 
 function showLogin() { dom.boot.hidden = true; dom.studio.hidden = true; dom.login.hidden = false; }
-function showStudio() { dom.boot.hidden = true; dom.login.hidden = true; dom.studio.hidden = false; renderAllAdmin(); setTimeout(() => { sendDraft(); wirePreviewDocument(); }, 120); }
+function showStudio() { dom.boot.hidden = true; dom.login.hidden = true; dom.studio.hidden = false; renderAllAdmin(); setTimeout(() => { syncPreview(); wirePreviewDocument(); }, 120); }
 async function loadPublicData() {
   const [site, projects] = await Promise.all([fetch('../content/site.json',{cache:'no-store'}).then(r=>r.json()), fetch('../content/projects.json',{cache:'no-store'}).then(r=>r.json())]);
   apiBase = site.admin?.apiBase || ''; return { site, projects: projects.projects };
@@ -289,7 +309,7 @@ async function boot() {
   } catch (error) { console.error(error); showLogin(); showToast('Le service d’administration n’est pas encore disponible', true); }
 }
 
-dom.frame.addEventListener('load', () => setTimeout(() => { sendDraft(); wirePreviewDocument(); }, 60));
+dom.frame.addEventListener('load', () => setTimeout(() => { syncPreview(); wirePreviewDocument(); }, 60));
 addEventListener('message', (event) => {
   if (event.source !== dom.frame.contentWindow || !event.data) return;
   if (event.data.type === 'mayin:preview-ready') sendDraft();

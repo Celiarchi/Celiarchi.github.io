@@ -208,7 +208,8 @@ function prepareAdminPreview() {
   if (!isAdminPreview) return;
   document.body.classList.add('admin-preview');
   document.body.classList.toggle('admin-preview--edit', previewEditMode);
-  document.querySelectorAll('[data-edit-inline]').forEach((element) => { element.contentEditable = previewEditMode ? 'plaintext-only' : 'false'; element.spellcheck = true; });
+  const coarsePointer = matchMedia('(pointer:coarse)').matches;
+  document.querySelectorAll('[data-edit-inline]').forEach((element) => { element.contentEditable = previewEditMode && !coarsePointer ? 'plaintext-only' : 'false'; element.spellcheck = true; });
   const hero = document.querySelector('.home-hero');
   if (hero && !hero.querySelector('.admin-image-handle')) {
     hero.insertAdjacentHTML('beforeend', '<button class="admin-image-handle" type="button" data-edit-path="site.heroImage" data-edit-label="Image de fond">✎ Image de fond</button>');
@@ -217,7 +218,9 @@ function prepareAdminPreview() {
 }
 
 if (isAdminPreview) {
-  document.addEventListener('click', (event) => {
+  let touchStart = null;
+  let touchSelectionUntil = 0;
+  const selectPreviewElement = (event) => {
     if (!previewEditMode) return;
     const editable = event.target.closest('[data-edit-path]');
     if (!editable) return;
@@ -226,6 +229,22 @@ if (isAdminPreview) {
     document.querySelectorAll('.admin-selected').forEach((item) => item.classList.remove('admin-selected'));
     editable.classList.add('admin-selected');
     window.parent.postMessage({ type: 'mayin:select', path: editable.dataset.editPath, label: editable.dataset.editLabel || 'Élément' }, location.origin);
+  };
+  document.addEventListener('pointerdown', (event) => {
+    if (event.pointerType === 'touch' || event.pointerType === 'pen') touchStart = { x: event.clientX, y: event.clientY, id: event.pointerId };
+  }, true);
+  document.addEventListener('pointerup', (event) => {
+    if (!touchStart || touchStart.id !== event.pointerId) return;
+    const moved = Math.hypot(event.clientX - touchStart.x, event.clientY - touchStart.y);
+    touchStart = null;
+    if (moved > 12) return;
+    touchSelectionUntil = performance.now() + 700;
+    selectPreviewElement(event);
+  }, true);
+  document.addEventListener('pointercancel', () => { touchStart = null; }, true);
+  document.addEventListener('click', (event) => {
+    if (performance.now() < touchSelectionUntil) { if (previewEditMode && event.target.closest('[data-edit-path]')) { event.preventDefault(); event.stopPropagation(); } return; }
+    selectPreviewElement(event);
   }, true);
   document.addEventListener('input', (event) => {
     const editable = event.target.closest('[data-edit-inline]');
