@@ -5,7 +5,7 @@ const dom = {
   frame: $('#preview'), shell: $('#preview-shell'), inspector: $('#inspector'), inspectorTitle: $('#inspector-title'),
   pageList: $('#page-list'), projectList: $('#project-list'), publish: $('#publish'), undo: $('#undo'), redo: $('#redo'),
   saveState: $('#save-state'), toast: $('#toast'), imageInput: $('#image-input'), previewPublic: $('#preview-public'),
-  leftSidebar: $('.sidebar--left'), rightSidebar: $('.sidebar--right'), mobileContent: $('#mobile-content'), mobileProperties: $('#mobile-properties'),
+  leftSidebar: $('.sidebar--left'), rightSidebar: $('.sidebar--right'), mobileContent: $('#mobile-content'), mobileProperties: $('#mobile-properties'), mobileDashboard: $('#mobile-dashboard'),
   accountButton: $('#account-button'), accountMenu: $('#account-menu'), accountAvatar: $('#account-avatar'), accountName: $('#account-name')
 };
 const pageDefinitions = [
@@ -120,6 +120,7 @@ function isCompact() { return matchMedia('(max-width:760px)').matches; }
 function openMobilePanel(panel = '') {
   dom.leftSidebar.classList.toggle('is-open', panel === 'content');
   dom.rightSidebar.classList.toggle('is-open', panel === 'properties');
+  document.body.classList.toggle('mobile-properties-open', panel === 'properties');
 }
 function revealInspector() { if (isCompact()) openMobilePanel('properties'); }
 function openDashboard() {
@@ -356,6 +357,7 @@ $('#collapse-left').addEventListener('click', () => {
 $('#close-inspector').addEventListener('click', () => { renderEmpty(); if(isCompact())openMobilePanel(''); });
 dom.mobileContent.addEventListener('click', () => openMobilePanel(dom.leftSidebar.classList.contains('is-open') ? '' : 'content'));
 dom.mobileProperties.addEventListener('click', () => openMobilePanel(dom.rightSidebar.classList.contains('is-open') ? '' : 'properties'));
+dom.mobileDashboard.addEventListener('click', openDashboard);
 dom.accountButton.addEventListener('click', () => { const open = dom.accountMenu.hidden; dom.accountMenu.hidden = !open; dom.accountButton.setAttribute('aria-expanded', String(open)); });
 document.addEventListener('click', (event) => { if (!event.target.closest('.account-wrap')) { dom.accountMenu.hidden = true; dom.accountButton.setAttribute('aria-expanded', 'false'); } });
 dom.accountMenu.addEventListener('click', (event) => { const action = event.target.closest('[data-account-action]')?.dataset.accountAction; if (!action) return; if (action === 'site') return dom.previewPublic.click(); if (action === 'dashboard') { dom.accountMenu.hidden=true; openDashboard(); return; } if (action === 'draft') return showToast(localStorage.getItem('mayin-studio-draft') ? 'Un brouillon est conservé sur cet appareil.' : 'Aucun brouillon en attente.'); if (action === 'logout') { if (localMode) return showToast('Mode local'); sessionStorage.removeItem('mayin-session'); sessionToken=''; location.reload(); } });
