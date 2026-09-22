@@ -1,5 +1,5 @@
 {
-  "schemaVersion": 2,
+  "schemaVersion": 3,
   "name": "May’in",
   "role": "Architecture intérieure · Design · Scénographie",
   "domain": "https://may-in.github.io",
@@ -12,6 +12,16 @@
   "homeAboutTitle": "Des lieux pensés à partir de leurs usages.",
   "homeAboutText": "Chaque projet commence par le lieu, ses contraintes et l’attention portée à celles et ceux qui vont l’habiter.",
   "homeProjectsLabel": "Voir les projets",
+  "menuLabel": "Menu",
+  "filterAllLabel": "Tous",
+  "filterPrivateLabel": "Privé",
+  "filterPublicLabel": "Public",
+  "privateLabel": "Privé",
+  "publicLabel": "Public",
+  "projectBackLabel": "Tous les projets",
+  "projectTypeLabel": "Projet",
+  "projectSummaryLabel": "En bref",
+  "projectAllLabel": "Tous les projets",
   "projectsEyebrow": "Sélection",
   "projectsTitle": "Projets",
   "aboutEyebrow": "À propos",
@@ -19,6 +29,8 @@
   "aboutLead": "Un espace pour présenter un parcours, des études et une manière personnelle de concevoir les lieux.",
   "aboutLeft": "J’imagine des lieux où volumes, matières et usages se répondent avec justesse.",
   "aboutRight": "Le récit personnel, les études et les influences pourront être ajoutés ici avec les mots de la créatrice.",
+  "aboutContactEyebrow": "Parlons de votre projet",
+  "aboutContactLabel": "Me contacter",
   "galleryEyebrow": "Regards",
   "galleryPageTitle": "Galerie",
   "galleryTitle": "Visites, matières et photographies personnelles.",
@@ -29,6 +41,10 @@
   "phone": "",
   "contactDetails": "Coordonnées à venir",
   "socials": "",
+  "copyright": "© 2026",
+  "notFoundEyebrow": "404 · May’in",
+  "notFoundTitle": "Cette page n’existe pas.",
+  "notFoundLinkLabel": "Retour à l’accueil",
   "navigation": [
     { "label": "Accueil", "href": "index.html", "visible": true },
     { "label": "Projets", "href": "projets.html", "visible": true },
@@ -46,7 +62,8 @@
     "projects": [],
     "gallery": [],
     "about": [],
-    "contact": []
+    "contact": [],
+    "notFound": []
   },
   "design": {
     "activePalette": "bordeaux",

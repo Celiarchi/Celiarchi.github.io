@@ -4,14 +4,16 @@ const dom = {
   boot: $('#boot'), login: $('#login'), studio: $('#studio'), loginButton: $('#login-button'),
   frame: $('#preview'), shell: $('#preview-shell'), inspector: $('#inspector'), inspectorTitle: $('#inspector-title'),
   pageList: $('#page-list'), projectList: $('#project-list'), publish: $('#publish'), undo: $('#undo'), redo: $('#redo'),
-  saveState: $('#save-state'), toast: $('#toast'), imageInput: $('#image-input'), previewPublic: $('#preview-public')
+  saveState: $('#save-state'), toast: $('#toast'), imageInput: $('#image-input'), previewPublic: $('#preview-public'),
+  leftSidebar: $('.sidebar--left'), rightSidebar: $('.sidebar--right'), mobileContent: $('#mobile-content'), mobileProperties: $('#mobile-properties')
 };
 const pageDefinitions = [
   { id: 'home', label: 'Accueil', icon: '⌂', href: '../index.html?admin-preview=1' },
   { id: 'projects', label: 'Projets', icon: '◫', href: '../projets.html?admin-preview=1' },
   { id: 'gallery', label: 'Galerie', icon: '▦', href: '../galerie.html?admin-preview=1' },
   { id: 'about', label: 'À propos', icon: '○', href: '../a-propos.html?admin-preview=1' },
-  { id: 'contact', label: 'Contact', icon: '↗', href: '../contact.html?admin-preview=1' }
+  { id: 'contact', label: 'Contact', icon: '↗', href: '../contact.html?admin-preview=1' },
+  { id: 'notFound', label: 'Page 404', icon: '!', href: '../404.html?admin-preview=1' }
 ];
 const localMode = ['localhost', '127.0.0.1'].includes(location.hostname);
 const clone = (value) => structuredClone(value);
@@ -32,6 +34,7 @@ let inlineSessionPath = '';
 let previewMode = 'edit';
 let saveTimer = 0;
 let toastTimer = 0;
+const siteImagePaths = new Set(['site.heroImage', 'site.socialImage']);
 
 function pathParts(path) { return path.split('.').filter(Boolean).map((part) => /^\d+$/.test(part) ? Number(part) : part); }
 function getPath(path) { return pathParts(path).reduce((value, part) => value?.[part], data); }
@@ -77,7 +80,7 @@ function wirePreviewDocument() {
     const editable = event.target.closest?.('[data-edit-path]'); if (!editable) return;
     event.preventDefault(); event.stopPropagation();
     previewDocument.querySelectorAll('.admin-selected').forEach((item) => item.classList.remove('admin-selected'));
-    editable.classList.add('admin-selected'); selectedPath = editable.dataset.editPath; activePanel = ''; renderProjectList(); renderInspector();
+    editable.classList.add('admin-selected'); selectedPath = editable.dataset.editPath; activePanel = ''; renderProjectList(); renderInspector(); revealInspector();
   }, true);
   previewDocument.addEventListener('input', (event) => {
     if (previewMode !== 'edit') return;
@@ -90,6 +93,12 @@ function navigatePreview(href, pageId) {
   activePage = pageId || activePage; dom.frame.src = href;
   $$('.page-button').forEach((button) => button.classList.toggle('is-active', button.dataset.page === activePage));
 }
+function isCompact() { return matchMedia('(max-width:760px)').matches; }
+function openMobilePanel(panel = '') {
+  dom.leftSidebar.classList.toggle('is-open', panel === 'content');
+  dom.rightSidebar.classList.toggle('is-open', panel === 'properties');
+}
+function revealInspector() { if (isCompact()) openMobilePanel('properties'); }
 
 function renderPageList() {
   dom.pageList.innerHTML = pageDefinitions.map((item) => `<button class="page-button${item.id === activePage ? ' is-active' : ''}" data-page="${item.id}" data-href="${item.href}"><span>${item.icon}</span><span>${item.label}</span></button>`).join('');
@@ -126,6 +135,12 @@ function renderSiteField(path, label) {
   const type = typeof value === 'string' && value.length > 70 ? 'textarea' : 'text';
   dom.inspector.innerHTML = `<div class="form-section"><h3>Contenu</h3>${field(label || 'Texte', path, type)}</div>`;
 }
+function renderLinkItem(path) {
+  const item = getPath(path); if (!item) return renderEmpty();
+  const social = path.startsWith('site.socialLinks.');
+  dom.inspectorTitle.textContent = social ? 'Lien externe' : 'Lien du menu';
+  dom.inspector.innerHTML = `<div class="form-section"><h3>${social ? 'Réseau ou lien' : 'Navigation'}</h3>${field('Libellé', `${path}.label`)}${field('Adresse', `${path}.${social ? 'url' : 'href'}`)}${field('Afficher ce lien', `${path}.visible`, 'checkbox')}</div><button class="danger-button" data-remove-path="${path}">Supprimer ce lien</button>`;
+}
 function renderProject(index) {
   const project = data.projects[index]; if (!project) return renderEmpty();
   const base = `projects.${index}`; dom.inspectorTitle.textContent = project.title;
@@ -135,6 +150,7 @@ function renderProject(index) {
     ${field('Masquer ce projet', `${base}.hidden`, 'checkbox')}</div>
     ${choices('Présentation de la couverture', `${base}.coverKind`, [['photo','Photo'],['cutout','Détourée']])}
     ${choices('Coins de la couverture', `${base}.coverRadius`, [['none','Carrés'],['soft','Doux'],['top-right','Angle'],['diagonal','Diagonal'],['all','Arrondis'],['pill','Pilule']])}
+    <div class="form-section"><h3>Dimensions et cadrage</h3>${field('Largeur', `${base}.width`, 'range')}${field('Position', `${base}.objectPosition`, 'select', { choices: [['center','Centre'],['top','Haut'],['bottom','Bas'],['left','Gauche'],['right','Droite']] })}</div>
     <div class="form-section"><h3>Images du projet (${project.media?.length || 0})</h3><div class="list-editor">${(project.media || []).map((item, mediaIndex) => `<button class="page-button" data-select-path="${base}.media.${mediaIndex}"><span>▧</span><span>${encode(item.caption || item.alt || `Image ${mediaIndex + 1}`)}</span></button>`).join('')}</div><button class="button" data-add-project-image="${index}">+ Ajouter une image</button></div>
     ${blockControls(`${base}.blocks`)}<div class="form-section"><h3>Organisation</h3><div class="field-row"><button class="button" data-move-path="projects.${index}" data-delta="-1">↑ Monter</button><button class="button" data-move-path="projects.${index}" data-delta="1">↓ Descendre</button></div><button class="button" data-duplicate-project="${index}">Dupliquer le projet</button></div><button class="danger-button" data-delete-project="${index}">Supprimer ce projet</button>`;
 }
@@ -145,19 +161,19 @@ function renderMedia(projectIndex, mediaIndex) {
     ${choices('Taille', `${base}.kind`, [['wide','Large'],['process','Moyenne'],['detail','Petite'],['cutout','Détourée'],['plan','Plan']])}
     ${choices('Placement', `${base}.align`, [['left','Gauche'],['center','Centre'],['right','Droite']])}
     ${choices('Coins', `${base}.radius`, [['none','Carrés'],['soft','Doux'],['top-right','Angle'],['diagonal','Diagonal'],['all','Arrondis'],['pill','Pilule']])}
-    <div class="form-section"><h3>Dimensions</h3>${field('Largeur', `${base}.width`, 'range')}</div>
+    <div class="form-section"><h3>Dimensions et cadrage</h3>${field('Largeur', `${base}.width`, 'range')}${field('Position', `${base}.objectPosition`, 'select', { choices: [['center','Centre'],['top','Haut'],['bottom','Bas'],['left','Gauche'],['right','Droite']] })}</div>
     <div class="form-section"><h3>Organisation</h3><div class="field-row"><button class="button" data-move-path="${base}" data-delta="-1">↑ Avant</button><button class="button" data-move-path="${base}" data-delta="1">↓ Après</button></div><button class="danger-button" data-remove-path="${base}">Retirer cette image</button></div>`;
 }
 function renderGalleryItem(index) {
   const base = `site.gallery.items.${index}`; dom.inspectorTitle.textContent = `Galerie · ${index + 1}`;
   dom.inspector.innerHTML = `${imageControl(`${base}.src`)}<div class="form-section"><h3>Informations</h3>${field('Catégorie', `${base}.category`)}${field('Légende', `${base}.caption`, 'textarea')}${field('Crédit / source', `${base}.credit`)}${field('Description accessible', `${base}.alt`, 'textarea')}</div>
     ${choices('Taille', `${base}.size`, [['small','Petite'],['medium','Moyenne'],['large','Grande']])}${choices('Coins', `${base}.radius`, [['none','Carrés'],['soft','Doux'],['top-right','Angle'],['diagonal','Diagonal'],['all','Arrondis'],['pill','Pilule']])}
-    <div class="form-section">${field('Largeur', `${base}.width`, 'range')}<div class="field-row"><button class="button" data-move-path="${base}" data-delta="-1">↑ Avant</button><button class="button" data-move-path="${base}" data-delta="1">↓ Après</button></div><button class="danger-button" data-remove-path="${base}">Retirer de la galerie</button></div>`;
+    <div class="form-section">${field('Largeur', `${base}.width`, 'range')}${field('Position', `${base}.objectPosition`, 'select', { choices: [['center','Centre'],['top','Haut'],['bottom','Bas'],['left','Gauche'],['right','Droite']] })}<div class="field-row"><button class="button" data-move-path="${base}" data-delta="-1">↑ Avant</button><button class="button" data-move-path="${base}" data-delta="1">↓ Après</button></div><button class="danger-button" data-remove-path="${base}">Retirer de la galerie</button></div>`;
 }
 function renderBlock(path) {
   const block = getPath(path); if (!block) return renderEmpty(); dom.inspectorTitle.textContent = 'Bloc de contenu';
   let fields = '';
-  if (block.type === 'image') fields = imageControl(`${path}.src`) + field('Légende', `${path}.caption`, 'textarea') + choices('Coins', `${path}.radius`, [['none','Carrés'],['soft','Doux'],['top-right','Angle'],['diagonal','Diagonal'],['all','Arrondis']]);
+  if (block.type === 'image') fields = imageControl(`${path}.src`) + field('Légende', `${path}.caption`, 'textarea') + field('Description accessible', `${path}.alt`, 'textarea') + field('Largeur', `${path}.width`, 'range') + field('Position', `${path}.objectPosition`, 'select', { choices: [['center','Centre'],['top','Haut'],['bottom','Bas'],['left','Gauche'],['right','Droite']] }) + choices('Coins', `${path}.radius`, [['none','Carrés'],['soft','Doux'],['top-right','Angle'],['diagonal','Diagonal'],['all','Arrondis']]);
   else if (block.type === 'spacer') fields = field('Hauteur', `${path}.height`, 'range', { min:20,max:240,step:10,defaultValue:80 });
   else if (block.type !== 'divider') fields = field('Texte', `${path}.text`, 'textarea', { rows: 6 });
   dom.inspector.innerHTML = `<div class="form-section"><h3>${encode(block.type)}</h3>${fields}</div><div class="form-section"><div class="field-row"><button class="button" data-move-path="${path}" data-delta="-1">↑ Avant</button><button class="button" data-move-path="${path}" data-delta="1">↓ Après</button></div><button class="danger-button" data-remove-path="${path}">Supprimer ce bloc</button></div>`;
@@ -179,11 +195,12 @@ function renderGalleryPanel() {
 }
 function renderSettings() {
   dom.inspectorTitle.textContent = 'Réglages du site';
-  dom.inspector.innerHTML = `<div class="form-section"><h3>Identité</h3>${field('Nom du site','site.name')}${field('Activités','site.role')}${field('Adresse du site','site.domain','url')}</div><div class="form-section"><h3>Référencement</h3>${field('Titre pour les moteurs de recherche','site.seoTitle')}${field('Description','site.seoDescription','textarea')}${field('Image de partage','site.socialImage')}</div><div class="form-section"><h3>Contact</h3>${field('E-mail','site.email','email')}${field('Téléphone','site.phone')}${field('Coordonnées affichées','site.contactDetails','textarea')}</div><div class="form-section"><h3>Sauvegarde</h3><button class="button" data-export>Télécharger une sauvegarde JSON</button></div>`;
+  dom.inspector.innerHTML = `<div class="form-section"><h3>Identité</h3>${field('Nom du site','site.name')}${field('Activités','site.role')}${field('Adresse du site','site.domain','url')}</div>${imageControl('site.socialImage','Image de partage')}<div class="form-section"><h3>Référencement</h3>${field('Titre pour les moteurs de recherche','site.seoTitle')}${field('Description','site.seoDescription','textarea')}</div><div class="form-section"><h3>Libellés globaux</h3>${field('Bouton du menu','site.menuLabel')}${field('Catégorie privée','site.privateLabel')}${field('Catégorie publique','site.publicLabel')}${field('Copyright','site.copyright')}</div><div class="form-section"><h3>Contact</h3>${field('E-mail','site.email','email')}${field('Téléphone','site.phone')}${field('Coordonnées affichées','site.contactDetails','textarea')}</div><div class="form-section"><h3>Sauvegarde</h3><button class="button" data-export>Télécharger une sauvegarde JSON</button></div>`;
 }
 function renderPagePanel(pageId) {
   const definition = pageDefinitions.find(item => item.id === pageId); dom.inspectorTitle.textContent = definition?.label || 'Page';
-  dom.inspector.innerHTML = `<div class="form-section"><h3>Page ${encode(definition?.label || '')}</h3><p class="empty-state">Clique directement sur un texte ou une image dans la page pour le modifier.</p></div>${blockControls(`site.customBlocks.${pageId}`)}`;
+  const heading = pageId === 'notFound' ? 'Page 404' : `Page ${definition?.label || ''}`;
+  dom.inspector.innerHTML = `<div class="form-section"><h3>${encode(heading)}</h3><p class="empty-state">Clique directement sur un texte ou une image dans la page pour le modifier.</p></div>${blockControls(`site.customBlocks.${pageId}`)}`;
 }
 function renderEmpty() { dom.inspectorTitle.textContent = 'Propriétés'; dom.inspector.innerHTML = '<div class="empty-state"><span>✦</span><p>Sélectionne un texte, une image ou un projet dans la prévisualisation.</p></div>'; }
 function renderInspector() {
@@ -199,6 +216,9 @@ function renderInspector() {
   if (parts[0] === 'projects' && typeof parts[1] === 'number') return parts.length > 3 || ['title','description','cover'].includes(parts[2]) ? renderProject(parts[1]) : renderProject(parts[1]);
   if (parts.slice(0,3).join('.') === 'site.gallery.items' && typeof parts[3] === 'number') return renderGalleryItem(parts[3]);
   if (parts.slice(0,2).join('.') === 'site.customBlocks') return renderBlock(parts.slice(0,4).join('.'));
+  if (parts.slice(0,2).join('.') === 'site.navigation' && typeof parts[2] === 'number') return renderLinkItem(parts.slice(0,3).join('.'));
+  if (parts.slice(0,2).join('.') === 'site.socialLinks' && typeof parts[2] === 'number') return renderLinkItem(parts.slice(0,3).join('.'));
+  if (siteImagePaths.has(selectedPath)) { dom.inspectorTitle.textContent = selectedPath === 'site.heroImage' ? 'Image de fond' : 'Image de partage'; dom.inspector.innerHTML = imageControl(selectedPath); return; }
   renderSiteField(selectedPath, selectedPath.split('.').pop());
 }
 
@@ -273,7 +293,7 @@ dom.frame.addEventListener('load', () => setTimeout(() => { sendDraft(); wirePre
 addEventListener('message', (event) => {
   if (event.source !== dom.frame.contentWindow || !event.data) return;
   if (event.data.type === 'mayin:preview-ready') sendDraft();
-  if (event.data.type === 'mayin:select') { selectedPath = event.data.path; activePanel = ''; renderProjectList(); renderInspector(); }
+  if (event.data.type === 'mayin:select') { selectedPath = event.data.path; activePanel = ''; renderProjectList(); renderInspector(); revealInspector(); }
   if (event.data.type === 'mayin:inline') { if (inlineSessionPath !== event.data.path) { pushHistory(); inlineSessionPath = event.data.path; } setPath(event.data.path, event.data.value); markChanged(false); }
 });
 dom.loginButton.addEventListener('click', () => { if (!apiBase || apiBase.includes('REMPLACER')) return showToast('La connexion sécurisée est en cours de configuration', true); location.href = `${apiBase}/auth/login?returnTo=${encodeURIComponent(location.href)}`; });
@@ -281,17 +301,20 @@ dom.publish.addEventListener('click', publish); dom.undo.addEventListener('click
 dom.previewPublic.addEventListener('click', () => open(data.site.domain || '../index.html', '_blank', 'noopener'));
 $$('.segmented').forEach((button) => button.addEventListener('click', () => setPreviewMode(button.dataset.mode)));
 $$('[data-viewport]').forEach((button) => button.addEventListener('click', () => { $$('[data-viewport]').forEach(item=>item.classList.toggle('is-active',item===button)); dom.shell.className = `preview-shell preview-shell--${button.dataset.viewport}`; }));
-dom.pageList.addEventListener('click', (event) => { const button=event.target.closest('[data-page]'); if (!button) return; activePanel=`page:${button.dataset.page}`; selectedPath=''; navigatePreview(button.dataset.href,button.dataset.page); renderInspector(); });
-dom.projectList.addEventListener('click', (event) => { const row=event.target.closest('[data-project-index]'); if(!row)return; const index=Number(row.dataset.projectIndex); selectedPath=`projects.${index}`; activePanel=''; navigatePreview(`../project.html?slug=${encodeURIComponent(data.projects[index].slug)}&admin-preview=1`,'projects'); renderProjectList(); renderInspector(); });
-$$('[data-panel]').forEach((button) => button.addEventListener('click', () => { activePanel=button.dataset.panel; selectedPath=''; renderInspector(); }));
+dom.pageList.addEventListener('click', (event) => { const button=event.target.closest('[data-page]'); if (!button) return; activePanel=`page:${button.dataset.page}`; selectedPath=''; navigatePreview(button.dataset.href,button.dataset.page); renderInspector(); if(isCompact())openMobilePanel(''); });
+dom.projectList.addEventListener('click', (event) => { const row=event.target.closest('[data-project-index]'); if(!row)return; const index=Number(row.dataset.projectIndex); selectedPath=`projects.${index}`; activePanel=''; navigatePreview(`../project.html?slug=${encodeURIComponent(data.projects[index].slug)}&admin-preview=1`,'projects'); renderProjectList(); renderInspector(); if(isCompact())openMobilePanel('properties'); });
+$$('[data-panel]').forEach((button) => button.addEventListener('click', () => { activePanel=button.dataset.panel; selectedPath=''; renderInspector(); revealInspector(); }));
 $('#add-project').addEventListener('click', () => { pushHistory(); const number=data.projects.length+1; data.projects.push({slug:`nouveau-projet-${number}`,title:`Nouveau projet ${number}`,category:'prive',description:'Description du projet à compléter.',cover:'',coverKind:'photo',coverRadius:'soft',layout:'wide',media:[],blocks:[]}); selectedPath=`projects.${data.projects.length-1}`; activePanel=''; markChanged(); });
 $('#collapse-left').addEventListener('click', () => {
+  if (isCompact()) return openMobilePanel('');
   const projects = $('#project-list');
   const hidden = projects.hidden;
   projects.hidden = !hidden;
   $('#collapse-left').textContent = hidden ? '‹' : '›';
 });
-$('#close-inspector').addEventListener('click', renderEmpty);
+$('#close-inspector').addEventListener('click', () => { renderEmpty(); if(isCompact())openMobilePanel(''); });
+dom.mobileContent.addEventListener('click', () => openMobilePanel(dom.leftSidebar.classList.contains('is-open') ? '' : 'content'));
+dom.mobileProperties.addEventListener('click', () => openMobilePanel(dom.rightSidebar.classList.contains('is-open') ? '' : 'properties'));
 $('#account-button').addEventListener('click', () => { if (localMode) return showToast('Mode local'); sessionStorage.removeItem('mayin-session'); sessionToken=''; location.reload(); });
 dom.imageInput.addEventListener('change', () => handleUpload(dom.imageInput.files[0]));
 dom.inspector.addEventListener('focusin', (event) => { if (event.target.matches('[data-path]')) inlineSessionPath=''; });

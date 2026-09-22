@@ -19,6 +19,14 @@ menuToggle?.addEventListener('click', () => { const isOpen = navigation.classLis
 navigation?.addEventListener('click', (event) => { if (!event.target.closest('a')) return; navigation.classList.remove('is-open'); menuToggle?.setAttribute('aria-expanded', 'false'); if (menuToggle) menuToggle.lastChild.textContent = ' +'; });
 
 function normaliseSite(site) {
+  const defaults = {
+    menuLabel: 'Menu', filterAllLabel: 'Tous', filterPrivateLabel: 'Privé', filterPublicLabel: 'Public',
+    privateLabel: 'Privé', publicLabel: 'Public', projectBackLabel: 'Tous les projets', projectTypeLabel: 'Projet',
+    projectSummaryLabel: 'En bref', projectAllLabel: 'Tous les projets', aboutContactEyebrow: 'Parlons de votre projet',
+    aboutContactLabel: 'Me contacter', copyright: `© ${new Date().getFullYear()}`, notFoundEyebrow: '404 · May’in',
+    notFoundTitle: 'Cette page n’existe pas.', notFoundLinkLabel: 'Retour à l’accueil'
+  };
+  Object.entries(defaults).forEach(([key, value]) => { if (site[key] === undefined) site[key] = value; });
   site.navigation ||= [
     { label: 'Accueil', href: 'index.html', visible: true },
     { label: 'Projets', href: 'projets.html', visible: true },
@@ -31,7 +39,7 @@ function normaliseSite(site) {
   site.gallery.categories ||= [];
   site.gallery.items ||= [];
   site.customBlocks ||= {};
-  ['home', 'projects', 'gallery', 'about', 'contact'].forEach((key) => { site.customBlocks[key] ||= []; });
+  ['home', 'projects', 'gallery', 'about', 'contact', 'notFound'].forEach((key) => { site.customBlocks[key] ||= []; });
   return site;
 }
 
@@ -120,7 +128,7 @@ function imageStyle(item = {}) {
   const position = safeToken(item.objectPosition, 'center');
   return `--media-width:${width}%;--media-position:${position.replace('-', ' ')}`;
 }
-function categoryLabel(category) { return category === 'public' ? 'Public' : 'Privé'; }
+function categoryLabel(category) { return category === 'public' ? runtime.site.publicLabel : runtime.site.privateLabel; }
 
 function projectCard(project, index) {
   const image = project.cover ? `<img src="${assetSrc(project.cover)}" alt="${escapeHtml(project.title)}" loading="lazy" decoding="async" />` : '<span class="project-image__empty">Image à ajouter</span>';
@@ -147,14 +155,14 @@ function renderProjectPage(projects) {
   content.className = `project-layout project-layout--${safeToken(project.layout, 'wide')}`;
   document.title = `${project.title} — May’in`;
   const heroRadius = radiusClass(project.coverRadius || 'soft');
-  const hero = project.cover ? `<img class="project-hero__image${project.coverKind === 'cutout' ? ' project-hero__image--cutout' : ''} ${heroRadius}" src="${assetSrc(project.cover)}" alt="${escapeHtml(project.title)}" fetchpriority="high" data-edit-path="projects.${projectIndex}.cover" data-edit-label="Image de couverture" />` : '<div class="project-hero__empty">Image à ajouter</div>';
+  const hero = project.cover ? `<img class="project-hero__image${project.coverKind === 'cutout' ? ' project-hero__image--cutout' : ''} ${heroRadius}" style="${imageStyle(project)}" src="${assetSrc(project.cover)}" alt="${escapeHtml(project.title)}" fetchpriority="high" data-edit-path="projects.${projectIndex}.cover" data-edit-label="Image de couverture" />` : '<div class="project-hero__empty">Image à ajouter</div>';
   const media = (project.media || []).map((item, mediaIndex) => {
     const placement = item.align || ['left', 'right', 'center'][mediaIndex % 3];
     const radius = radiusClass(item.radius || (item.kind === 'cutout' || item.kind === 'plan' ? 'none' : 'soft'));
     return `<figure class="project-media project-media--${safeToken(item.kind, 'wide')} project-media--${safeToken(placement, 'center')} project-media--${safeToken(item.format, 'landscape')} ${radius}" style="${imageStyle(item)}" data-edit-path="projects.${projectIndex}.media.${mediaIndex}" data-edit-label="Image du projet"><img src="${assetSrc(item.src)}" alt="${escapeHtml(item.alt || `Vue du projet ${project.title}`)}" loading="lazy" decoding="async" /><figcaption data-edit-path="projects.${projectIndex}.media.${mediaIndex}.caption" data-edit-label="Légende" data-edit-inline="true">${escapeHtml(item.caption || '')}</figcaption></figure>`;
   }).join('');
   const blocks = renderBlocks(project.blocks || [], `projects.${projectIndex}.blocks`);
-  content.innerHTML = `<section class="project-hero"><a class="project-back" href="projets.html">← Tous les projets</a><p class="eyebrow">Projet ${categoryLabel(project.category)}</p><h1 data-edit-path="projects.${projectIndex}.title" data-edit-label="Titre du projet" data-edit-inline="true">${escapeHtml(project.title)}</h1>${hero}</section><section class="project-copy"><p class="eyebrow">En bref</p><div><p class="lead" data-edit-path="projects.${projectIndex}.description" data-edit-label="Description" data-edit-inline="true">${escapeHtml(project.description)}</p></div></section>${blocks}<section class="project-gallery">${media}<a href="projets.html" class="large-link">Tous les projets <span>↗</span></a></section>`;
+  content.innerHTML = `<section class="project-hero"><a class="project-back" href="projets.html">← <span data-edit-path="site.projectBackLabel" data-edit-label="Retour aux projets" data-edit-inline="true">${escapeHtml(runtime.site.projectBackLabel)}</span></a><p class="eyebrow"><span data-edit-path="site.projectTypeLabel" data-edit-label="Libellé du projet" data-edit-inline="true">${escapeHtml(runtime.site.projectTypeLabel)}</span> <span data-edit-path="site.${project.category === 'public' ? 'publicLabel' : 'privateLabel'}" data-edit-label="Catégorie" data-edit-inline="true">${escapeHtml(categoryLabel(project.category))}</span></p><h1 data-edit-path="projects.${projectIndex}.title" data-edit-label="Titre du projet" data-edit-inline="true">${escapeHtml(project.title)}</h1>${hero}</section><section class="project-copy"><p class="eyebrow" data-edit-path="site.projectSummaryLabel" data-edit-label="Titre du résumé" data-edit-inline="true">${escapeHtml(runtime.site.projectSummaryLabel)}</p><div><p class="lead" data-edit-path="projects.${projectIndex}.description" data-edit-label="Description" data-edit-inline="true">${escapeHtml(project.description)}</p></div></section>${blocks}<section class="project-gallery">${media}<a href="projets.html" class="large-link"><span data-edit-path="site.projectAllLabel" data-edit-label="Lien vers les projets" data-edit-inline="true">${escapeHtml(runtime.site.projectAllLabel)}</span> <span>↗</span></a></section>`;
 }
 
 function renderGallery(site) {
@@ -201,6 +209,10 @@ function prepareAdminPreview() {
   document.body.classList.add('admin-preview');
   document.body.classList.toggle('admin-preview--edit', previewEditMode);
   document.querySelectorAll('[data-edit-inline]').forEach((element) => { element.contentEditable = previewEditMode ? 'plaintext-only' : 'false'; element.spellcheck = true; });
+  const hero = document.querySelector('.home-hero');
+  if (hero && !hero.querySelector('.admin-image-handle')) {
+    hero.insertAdjacentHTML('beforeend', '<button class="admin-image-handle" type="button" data-edit-path="site.heroImage" data-edit-label="Image de fond">✎ Image de fond</button>');
+  }
   window.parent.postMessage({ type: 'mayin:preview-ready', page, href: location.href }, location.origin);
 }
 
