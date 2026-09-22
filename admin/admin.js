@@ -122,6 +122,11 @@ function openMobilePanel(panel = '') {
   dom.rightSidebar.classList.toggle('is-open', panel === 'properties');
 }
 function revealInspector() { if (isCompact()) openMobilePanel('properties'); }
+function openDashboard() {
+  activePanel = 'dashboard'; selectedPath = '';
+  renderInspector(); revealInspector();
+  loadDashboard().then(() => { if (activePanel === 'dashboard') renderDashboard(); });
+}
 
 function renderPageList() {
   dom.pageList.innerHTML = pageDefinitions.map((item) => `<button class="page-button${item.id === activePage ? ' is-active' : ''}" data-page="${item.id}" data-href="${item.href}"><span>${item.icon}</span><span>${item.label}</span></button>`).join('');
@@ -339,7 +344,7 @@ $$('.segmented').forEach((button) => button.addEventListener('click', () => setP
 $$('[data-viewport]').forEach((button) => button.addEventListener('click', () => { $$('[data-viewport]').forEach(item=>item.classList.toggle('is-active',item===button)); dom.shell.className = `preview-shell preview-shell--${button.dataset.viewport}`; }));
 dom.pageList.addEventListener('click', (event) => { const button=event.target.closest('[data-page]'); if (!button) return; activePanel=`page:${button.dataset.page}`; selectedPath=''; navigatePreview(button.dataset.href,button.dataset.page); renderInspector(); if(isCompact())openMobilePanel(''); });
 dom.projectList.addEventListener('click', (event) => { const add=event.target.closest('[data-add-project-image]'); if(add)return startUpload({type:'project-media',index:Number(add.dataset.addProjectImage)}); const media=event.target.closest('[data-project-media-index]'); if(media){const index=Number(media.dataset.projectIndex); const mediaIndex=media.dataset.projectMediaIndex; expandedProjectIndex=index; selectedPath=mediaIndex === 'cover' ? `projects.${index}.cover` : `projects.${index}.media.${mediaIndex}`; activePanel=''; renderProjectList(); renderInspector(); return;} const row=event.target.closest('[data-project-index]'); if(!row)return; const index=Number(row.dataset.projectIndex); expandedProjectIndex = expandedProjectIndex === index ? null : index; selectedPath=`projects.${index}`; activePanel=''; navigatePreview(`../project.html?slug=${encodeURIComponent(data.projects[index].slug)}&admin-preview=1`,'projects'); renderProjectList(); renderInspector(); if(isCompact())openMobilePanel('properties'); });
-$$('[data-panel]').forEach((button) => button.addEventListener('click', () => { activePanel=button.dataset.panel; selectedPath=''; renderInspector(); revealInspector(); }));
+$$('[data-panel]').forEach((button) => button.addEventListener('click', () => { if (button.dataset.panel === 'dashboard') return openDashboard(); activePanel=button.dataset.panel; selectedPath=''; renderInspector(); revealInspector(); }));
 $('#add-project').addEventListener('click', () => { pushHistory(); const number=data.projects.length+1; data.projects.push({slug:`nouveau-projet-${number}`,title:`Nouveau projet ${number}`,category:'prive',description:'Description du projet à compléter.',cover:'',coverKind:'photo',coverRadius:'soft',layout:'wide',media:[],blocks:[]}); selectedPath=`projects.${data.projects.length-1}`; activePanel=''; markChanged(); });
 $('#collapse-left').addEventListener('click', () => {
   if (isCompact()) return openMobilePanel('');
@@ -353,7 +358,7 @@ dom.mobileContent.addEventListener('click', () => openMobilePanel(dom.leftSideba
 dom.mobileProperties.addEventListener('click', () => openMobilePanel(dom.rightSidebar.classList.contains('is-open') ? '' : 'properties'));
 dom.accountButton.addEventListener('click', () => { const open = dom.accountMenu.hidden; dom.accountMenu.hidden = !open; dom.accountButton.setAttribute('aria-expanded', String(open)); });
 document.addEventListener('click', (event) => { if (!event.target.closest('.account-wrap')) { dom.accountMenu.hidden = true; dom.accountButton.setAttribute('aria-expanded', 'false'); } });
-dom.accountMenu.addEventListener('click', (event) => { const action = event.target.closest('[data-account-action]')?.dataset.accountAction; if (!action) return; if (action === 'site') return dom.previewPublic.click(); if (action === 'dashboard') { activePanel='dashboard'; selectedPath=''; dom.accountMenu.hidden=true; renderInspector(); return; } if (action === 'draft') return showToast(localStorage.getItem('mayin-studio-draft') ? 'Un brouillon est conservé sur cet appareil.' : 'Aucun brouillon en attente.'); if (action === 'logout') { if (localMode) return showToast('Mode local'); sessionStorage.removeItem('mayin-session'); sessionToken=''; location.reload(); } });
+dom.accountMenu.addEventListener('click', (event) => { const action = event.target.closest('[data-account-action]')?.dataset.accountAction; if (!action) return; if (action === 'site') return dom.previewPublic.click(); if (action === 'dashboard') { dom.accountMenu.hidden=true; openDashboard(); return; } if (action === 'draft') return showToast(localStorage.getItem('mayin-studio-draft') ? 'Un brouillon est conservé sur cet appareil.' : 'Aucun brouillon en attente.'); if (action === 'logout') { if (localMode) return showToast('Mode local'); sessionStorage.removeItem('mayin-session'); sessionToken=''; location.reload(); } });
 dom.imageInput.addEventListener('change', () => handleUpload(dom.imageInput.files[0]));
 dom.inspector.addEventListener('focusin', (event) => { if (event.target.matches('[data-path]')) inlineSessionPath=''; });
 dom.inspector.addEventListener('input', (event) => { if (event.target.type === 'range') event.target.nextElementSibling.textContent=`${event.target.value}%`; });
