@@ -132,7 +132,7 @@ function applyStructuredData(site) {
     '@context': 'https://schema.org',
     '@graph': [
       { '@type': 'WebSite', '@id': `${base}/#website`, url: `${base}/`, name: site.name, alternateName: ['May-in', 'May In', 'Mayin'], inLanguage: 'fr-BE' },
-      { '@type': 'Organization', '@id': `${base}/#studio`, name: site.name, alternateName: ['May-in', 'May In', 'Mayin'], url: `${base}/`, logo: `${base}/favicon.svg`, image: `${base}/${String(site.socialImage || 'assets/social-preview.png').replace(/^\//, '')}`, description: site.seoDescription, areaServed: ['Mons', 'Thuin', 'Charleroi', 'Hainaut', 'Wallonie'], founder: { '@id': `${base}/#celia-may` } },
+      { '@type': 'Organization', '@id': `${base}/#studio`, name: site.name, alternateName: ['May-in', 'May In', 'Mayin'], url: `${base}/`, logo: `${base}/favicon.png`, image: `${base}/${String(site.socialImage || 'assets/social-preview.png').replace(/^\//, '')}`, description: site.seoDescription, areaServed: ['Mons', 'Thuin', 'Charleroi', 'Hainaut', 'Wallonie'], founder: { '@id': `${base}/#celia-may` } },
       { '@type': 'Person', '@id': `${base}/#celia-may`, name: creator, jobTitle: 'Architecte d’intérieur', worksFor: { '@id': `${base}/#studio` } }
     ]
   };
