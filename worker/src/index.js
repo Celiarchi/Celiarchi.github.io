@@ -87,6 +87,26 @@ function topEntries(entries, limit = 6) { return Object.entries(entries || {}).s
 function deviceType(ua = '') { return /tablet|ipad/i.test(ua) ? 'Tablette' : /mobi|android|iphone/i.test(ua) ? 'Mobile' : 'Ordinateur'; }
 function botName(ua = '') { if (/googlebot/i.test(ua)) return 'Googlebot'; if (/bingbot/i.test(ua)) return 'Bingbot'; if (/facebookexternalhit/i.test(ua)) return 'Facebook'; if (/linkedinbot/i.test(ua)) return 'LinkedIn'; return /bot|crawler|spider|slurp|preview/i.test(ua) ? 'Autre robot' : ''; }
 function increment(target, key) { if (!key) return; target[key] = (target[key] || 0) + 1; }
+function analyticsKey(date = new Date()) { return `analytics:v2:${monthKey(date)}`; }
+async function anonymize(value, secret) {
+  const digest = await crypto.subtle.digest('SHA-256', encoder.encode(`${secret}:${value}`));
+  return Array.from(new Uint8Array(digest)).slice(0, 16).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+async function visitIdentity(request, payload, env) {
+  const ip = request.headers.get('CF-Connecting-IP') || request.headers.get('X-Forwarded-For')?.split(',')[0]?.trim() || '';
+  const sessionId = String(payload.sessionId || '');
+  if (ip) return `ip-${await anonymize(ip, env.COOKIE_SECRET)}`;
+  if (/^v-[a-z0-9-]{12,100}$/i.test(sessionId)) return `session-${await anonymize(sessionId, env.COOKIE_SECRET)}`;
+  return `unknown-${await anonymize(request.headers.get('User-Agent') || 'unknown', env.COOKIE_SECRET)}`;
+}
+async function claimAnalyticsWindow(env, identity, path = '') {
+  const ttl = 2 * 60 * 60; const visitKey = `analytics:window:${identity}`;
+  const active = await env.STUDIO_DATA.get(visitKey); await env.STUDIO_DATA.put(visitKey, '1', { expirationTtl: ttl });
+  if (!path) return { newVisit: !active, newPath: false };
+  const pageKey = `analytics:page:${await anonymize(`${identity}:${path}`, env.COOKIE_SECRET)}`;
+  const pageSeen = await env.STUDIO_DATA.get(pageKey); await env.STUDIO_DATA.put(pageKey, '1', { expirationTtl: ttl });
+  return { newVisit: !active, newPath: !pageSeen };
+}
 
 async function recordVisit(request, env) {
   if (!env.STUDIO_DATA || !publicRequestAllowed(request, env)) return responseJson({ ok: true }, 204, request, env);
@@ -94,10 +114,12 @@ async function recordVisit(request, env) {
   const path = String(payload.path || '/').slice(0, 160);
   const referer = String(payload.referer || 'Direct').replace(/^https?:\/\//, '').split('/')[0].slice(0, 100) || 'Direct';
   const ua = request.headers.get('User-Agent') || ''; const bot = botName(ua); const country = request.cf?.country || 'Inconnu';
-  const city = request.cf?.city || ''; const key = `analytics:${monthKey()}`;
+  const city = request.cf?.city || ''; const key = analyticsKey(); const identity = await visitIdentity(request, payload, env);
   const stats = JSON.parse(await env.STUDIO_DATA.get(key) || '{"totals":{"human":0,"bots":0},"paths":{},"referers":{},"countries":{},"cities":{},"devices":{},"bots":{}}');
-  if (bot) { stats.totals.bots++; increment(stats.bots, bot); }
-  else { stats.totals.human++; increment(stats.paths, path); increment(stats.referers, referer); increment(stats.countries, country); increment(stats.cities, city); increment(stats.devices, deviceType(ua)); }
+  const claim = await claimAnalyticsWindow(env, `${bot ? `bot-${bot}` : 'human'}:${identity}`, bot ? '' : path);
+  if (bot) { if (claim.newVisit) { stats.totals.bots++; increment(stats.bots, bot); } }
+  else if (claim.newVisit) { stats.totals.human++; increment(stats.referers, referer); increment(stats.countries, country); increment(stats.cities, city); increment(stats.devices, deviceType(ua)); }
+  if (!bot && claim.newPath) increment(stats.paths, path);
   stats.updatedAt = new Date().toISOString();
   await env.STUDIO_DATA.put(key, JSON.stringify(stats), { expirationTtl: 400 * 24 * 60 * 60 });
   return responseJson({ ok: true }, 200, request, env);
@@ -115,8 +137,8 @@ async function receiveMessage(request, env) {
 }
 
 async function readDashboard(request, env) {
-  const stats = env.STUDIO_DATA ? JSON.parse(await env.STUDIO_DATA.get(`analytics:${monthKey()}`) || '{"totals":{"human":0,"bots":0},"paths":{},"referers":{},"countries":{},"cities":{},"devices":{},"bots":{}}') : { totals: { human: 0, bots: 0 } };
-  return responseJson({ month: monthKey(), human: stats.totals?.human || 0, bots: stats.totals?.bots || 0, paths: topEntries(stats.paths), referers: topEntries(stats.referers), countries: topEntries(stats.countries), cities: topEntries(stats.cities), devices: topEntries(stats.devices), botTypes: topEntries(stats.bots), updatedAt: stats.updatedAt || null }, 200, request, env);
+  const stats = env.STUDIO_DATA ? JSON.parse(await env.STUDIO_DATA.get(analyticsKey()) || '{"totals":{"human":0,"bots":0},"paths":{},"referers":{},"countries":{},"cities":{},"devices":{},"bots":{}}') : { totals: { human: 0, bots: 0 } };
+  return responseJson({ month: monthKey(), human: stats.totals?.human || 0, bots: stats.totals?.bots || 0, paths: topEntries(stats.paths), referers: topEntries(stats.referers), countries: topEntries(stats.countries), cities: topEntries(stats.cities), devices: topEntries(stats.devices), botTypes: topEntries(stats.bots), sessionWindowHours: 2, updatedAt: stats.updatedAt || null }, 200, request, env);
 }
 
 async function readMessages(request, env) {
