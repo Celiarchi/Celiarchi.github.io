@@ -155,6 +155,29 @@ function imageStyle(item = {}) {
   const position = safeToken(item.objectPosition, 'center');
   return `--media-width:${width}%;--media-position:${position.replace('-', ' ')}`;
 }
+function blockSurface(block = {}) {
+  const surfaces = { paper: 'var(--paper)', soft: 'var(--soft)', ink: 'var(--ink)', accent: 'var(--wine)' };
+  return block.surface === 'custom' ? (block.background || 'transparent') : (surfaces[block.surface] || 'transparent');
+}
+function blockTextColor(block = {}) {
+  const colors = { ink: 'var(--ink)', paper: 'var(--paper)', accent: 'var(--wine)' };
+  return block.textColor === 'custom' ? (block.color || 'var(--ink)') : (colors[block.textColor] || 'inherit');
+}
+function boundedSetting(value, minimum, maximum, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(minimum, Math.min(maximum, number)) : fallback;
+}
+function blockStyle(block = {}) {
+  const width = boundedSetting(block.width, 25, 100, 100);
+  const minHeight = boundedSetting(block.minHeight, 0, 520, 0);
+  const padding = boundedSetting(block.padding, 0, 120, 0);
+  const gap = boundedSetting(block.spacing, 0, 240, 36);
+  const fontSize = boundedSetting(block.fontSize, 14, 96, 18);
+  const align = safeToken(block.align, 'left');
+  const textAlign = safeToken(block.textAlign, 'left');
+  const font = safeToken(block.fontFamily, 'sans');
+  return `--block-width:${width}%;--block-min-height:${minHeight}px;--block-padding:${padding}px;--block-gap:${gap}px;--block-font-size:${fontSize}px;--block-align:${align};--block-text-align:${textAlign};--block-font:var(--${font});--block-color:${blockTextColor(block)};--block-background:${blockSurface(block)}`;
+}
 function categoryLabel(category) { return category === 'public' ? runtime.site.publicLabel : runtime.site.privateLabel; }
 
 function projectCard(project, index) {
@@ -207,18 +230,20 @@ function renderGallery(site) {
   const grid = document.querySelector('#gallery-grid'); if (!grid) return;
   const items = site.gallery?.items || [];
   document.querySelector('.gallery-empty')?.classList.toggle('gallery-empty--with-items', items.length > 0);
-  grid.innerHTML = items.map((item, index) => `<figure class="gallery-item gallery-item--${safeToken(item.size, 'medium')} ${radiusClass(item.radius || 'soft')}" data-edit-path="site.gallery.items.${index}" data-edit-label="Image de galerie" style="${imageStyle(item)}"><img src="${assetSrc(item.src)}" alt="${escapeHtml(item.alt || item.caption || '')}" loading="lazy" /><figcaption><span>${escapeHtml(item.category || '')}</span><span data-edit-path="site.gallery.items.${index}.caption" data-edit-label="Légende" data-edit-inline="true">${escapeHtml(item.caption || '')}</span>${item.credit ? `<small>${escapeHtml(item.credit)}</small>` : ''}</figcaption></figure>`).join('');
+  grid.innerHTML = items.map((item, index) => `<figure class="gallery-item gallery-item--${safeToken(item.size, 'medium')} gallery-item--${safeToken(item.format, 'original')} ${radiusClass(item.radius || 'soft')}" data-edit-path="site.gallery.items.${index}" data-edit-label="Image de galerie" style="${imageStyle(item)}"><img src="${assetSrc(item.src)}" alt="${escapeHtml(item.alt || item.caption || '')}" loading="lazy" /><figcaption><span>${escapeHtml(item.category || '')}</span><span data-edit-path="site.gallery.items.${index}.caption" data-edit-label="Légende" data-edit-inline="true">${escapeHtml(item.caption || '')}</span>${item.credit ? `<small>${escapeHtml(item.credit)}</small>` : ''}</figcaption></figure>`).join('');
 }
 
 function renderBlocks(blocks, basePath) {
   if (!blocks?.length) return '';
   return `<section class="custom-blocks">${blocks.filter((block) => block.hidden !== true).map((block, index) => {
     const path = `${basePath}.${index}`;
-    if (block.type === 'image') return `<figure class="custom-block custom-block--image ${radiusClass(block.radius || 'soft')}" style="${imageStyle(block)}" data-edit-path="${path}" data-edit-label="Bloc image"><img src="${assetSrc(block.src)}" alt="${escapeHtml(block.alt || block.caption || '')}" /><figcaption data-edit-path="${path}.caption" data-edit-label="Légende" data-edit-inline="true">${escapeHtml(block.caption || '')}</figcaption></figure>`;
-    if (block.type === 'quote') return `<blockquote class="custom-block custom-block--quote" data-edit-path="${path}" data-edit-label="Citation"><p data-edit-path="${path}.text" data-edit-inline="true">${escapeHtml(block.text || 'Citation')}</p></blockquote>`;
+    const classes = `custom-block--align-${safeToken(block.align, 'left')} custom-block--${safeToken(block.format, 'original')}`;
+    const style = `${imageStyle(block)};${blockStyle(block)}`;
+    if (block.type === 'image') return `<figure class="custom-block custom-block--image ${classes} ${radiusClass(block.radius || 'soft')}" style="${style}" data-edit-path="${path}" data-edit-label="Bloc image"><img src="${assetSrc(block.src)}" alt="${escapeHtml(block.alt || block.caption || '')}" /><figcaption data-edit-path="${path}.caption" data-edit-label="Légende" data-edit-inline="true">${escapeHtml(block.caption || '')}</figcaption></figure>`;
+    if (block.type === 'quote') return `<blockquote class="custom-block custom-block--quote ${classes}" style="${style}" data-edit-path="${path}" data-edit-label="Citation"><p data-edit-path="${path}.text" data-edit-inline="true">${escapeHtml(block.text || 'Citation')}</p></blockquote>`;
     if (block.type === 'divider') return `<hr class="custom-block custom-block--divider" data-edit-path="${path}" data-edit-label="Séparateur" />`;
     if (block.type === 'spacer') return `<div class="custom-block custom-block--spacer" style="--space:${Math.max(20, Math.min(240, Number(block.height) || 80))}px" data-edit-path="${path}" data-edit-label="Espacement"></div>`;
-    return `<div class="custom-block custom-block--text custom-block--${safeToken(block.style, 'body')}" data-edit-path="${path}" data-edit-label="Bloc texte"><p data-edit-path="${path}.text" data-edit-inline="true">${escapeHtml(block.text || 'Nouveau texte')}</p></div>`;
+    return `<div class="custom-block custom-block--text custom-block--${safeToken(block.style, 'body')} ${classes} ${radiusClass(block.radius || 'soft')}" style="${style}" data-edit-path="${path}" data-edit-label="Bloc texte"><p data-edit-path="${path}.text" data-edit-inline="true">${escapeHtml(block.text || 'Nouveau texte')}</p></div>`;
   }).join('')}</section>`;
 }
 
@@ -291,6 +316,7 @@ if (isAdminPreview) {
     document.querySelectorAll('.admin-selected').forEach((item) => item.classList.remove('admin-selected'));
     editable.classList.add('admin-selected');
     window.parent.postMessage({ type: 'mayin:select', path: editable.dataset.editPath, label: editable.dataset.editLabel || 'Élément' }, location.origin);
+    if (editable.dataset.editInline) requestAnimationFrame(() => editable.focus({ preventScroll: true }));
   };
   document.addEventListener('pointerdown', (event) => {
     if (event.pointerType === 'touch' || event.pointerType === 'pen') touchStart = { x: event.clientX, y: event.clientY, id: event.pointerId };
@@ -312,6 +338,11 @@ if (isAdminPreview) {
     const editable = event.target.closest('[data-edit-inline]');
     if (!editable || !previewEditMode) return;
     window.parent.postMessage({ type: 'mayin:inline', path: editable.dataset.editPath, value: editable.textContent }, location.origin);
+  });
+  document.addEventListener('focusout', (event) => {
+    const editable = event.target.closest('[data-edit-inline]');
+    if (!editable || !previewEditMode) return;
+    window.parent.postMessage({ type: 'mayin:inline-commit', path: editable.dataset.editPath }, location.origin);
   });
   addEventListener('message', (event) => {
     if (event.origin !== location.origin || !event.data) return;

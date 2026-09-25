@@ -5,6 +5,7 @@ const dom = {
   frame: $('#preview'), shell: $('#preview-shell'), inspector: $('#inspector'), inspectorTitle: $('#inspector-title'),
   pageList: $('#page-list'), projectList: $('#project-list'), publish: $('#publish'), undo: $('#undo'), redo: $('#redo'),
   saveState: $('#save-state'), toast: $('#toast'), imageInput: $('#image-input'), previewPublic: $('#preview-public'),
+  discardDraft: $('#discard-draft'),
   leftSidebar: $('.sidebar--left'), rightSidebar: $('.sidebar--right'), mobileContent: $('#mobile-content'), mobileProperties: $('#mobile-properties'), mobileDashboard: $('#mobile-dashboard'),
   accountButton: $('#account-button'), accountMenu: $('#account-menu'), accountAvatar: $('#account-avatar'), accountName: $('#account-name')
 };
@@ -24,6 +25,7 @@ let csrf = '';
 let sessionToken = sessionStorage.getItem('mayin-session') || '';
 let currentUser = null;
 let data = { site: null, projects: [] };
+let publishedData = null;
 let undoStack = [];
 let redoStack = [];
 let selectedPath = '';
@@ -34,6 +36,7 @@ let uploadCounter = 0;
 let inlineSessionPath = '';
 let previewMode = 'edit';
 let saveTimer = 0;
+let previewSyncTimer = 0;
 let toastTimer = 0;
 let expandedProjectIndex = null;
 let dashboard = null;
@@ -45,6 +48,10 @@ function setPath(path, value) { const parts = pathParts(path); const last = part
 function deletePath(path) { const parts = pathParts(path); const last = parts.pop(); const parent = parts.reduce((item, part) => item[part], data); Array.isArray(parent) ? parent.splice(last, 1) : delete parent[last]; }
 function slugify(value) { return String(value || 'element').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 70) || 'element'; }
 function moveItem(path, delta) { const parts = pathParts(path); const index = parts.pop(); const list = parts.reduce((item, part) => item[part], data); const next = index + Number(delta); if (!Array.isArray(list) || next < 0 || next >= list.length) return; pushHistory(); [list[index], list[next]] = [list[next], list[index]]; selectedPath = `${parts.join('.')}.${next}`; markChanged(); }
+function moveItemTo(basePath, from, to) {
+  const list = getPath(basePath); if (!Array.isArray(list) || from === to || from < 0 || to < 0 || from >= list.length || to >= list.length) return;
+  pushHistory(); const [item] = list.splice(from, 1); list.splice(to, 0, item); selectedPath = `${basePath}.${to}`; markChanged();
+}
 
 function showToast(message, error = false) {
   clearTimeout(toastTimer); dom.toast.textContent = message; dom.toast.className = `toast is-visible${error ? ' is-error' : ''}`;
@@ -56,14 +63,24 @@ function pushHistory() {
   undoStack.push(JSON.stringify(data)); if (undoStack.length > 40) undoStack.shift(); redoStack = []; updateHistoryButtons();
 }
 function updateHistoryButtons() { dom.undo.disabled = undoStack.length === 0; dom.redo.disabled = redoStack.length === 0; }
-function markChanged(refreshInspector = true) {
+function saveDraftSoon() {
   clearTimeout(saveTimer); setSaveState('Modifications…');
-  saveTimer = setTimeout(() => { localStorage.setItem('mayin-studio-draft', JSON.stringify(data)); setSaveState('Brouillon local'); }, 500);
-  sendDraft(); renderProjectList(); if (refreshInspector) renderInspector();
+  saveTimer = setTimeout(() => { localStorage.setItem('mayin-studio-draft', JSON.stringify(data)); setSaveState('Brouillon local · non publié'); }, 500);
+}
+function syncPreviewSoon(delay = 240) {
+  clearTimeout(previewSyncTimer); previewSyncTimer = setTimeout(sendDraft, delay);
+}
+function markChanged(refreshInspector = true, syncPreview = true, refreshLists = true) {
+  saveDraftSoon(); if (syncPreview) sendDraft(); if (refreshLists) renderProjectList(); if (refreshInspector) renderInspector();
 }
 function mutate(path, value, refresh = true) { pushHistory(); setPath(path, value); markChanged(refresh); }
-function undo() { if (!undoStack.length) return; redoStack.push(JSON.stringify(data)); data = JSON.parse(undoStack.pop()); updateHistoryButtons(); renderAllAdmin(); }
-function redo() { if (!redoStack.length) return; undoStack.push(JSON.stringify(data)); data = JSON.parse(redoStack.pop()); updateHistoryButtons(); renderAllAdmin(); }
+function undo() { if (!undoStack.length) return; redoStack.push(JSON.stringify(data)); data = JSON.parse(undoStack.pop()); inlineSessionPath = ''; updateHistoryButtons(); saveDraftSoon(); renderAllAdmin(); setSaveState('Brouillon local · non publié'); }
+function redo() { if (!redoStack.length) return; undoStack.push(JSON.stringify(data)); data = JSON.parse(redoStack.pop()); inlineSessionPath = ''; updateHistoryButtons(); saveDraftSoon(); renderAllAdmin(); setSaveState('Brouillon local · non publié'); }
+function discardDraft() {
+  if (!publishedData) return;
+  if (!confirm('Revenir à la dernière version publiée ? Les modifications de ce brouillon seront retirées de cet appareil.')) return;
+  data = clone(publishedData); undoStack = []; redoStack = []; inlineSessionPath = ''; localStorage.removeItem('mayin-studio-draft'); updateHistoryButtons(); renderAllAdmin(); setSaveState('Version publiée'); showToast('Brouillon retiré : la version publiée est restaurée.');
+}
 
 function sendDraft() {
   dom.frame.contentWindow?.postMessage({ type: 'mayin:data', site: data.site, projects: data.projects }, location.origin);
@@ -80,37 +97,6 @@ function wirePreviewDocument() {
   const previewDocument = dom.frame.contentDocument;
   if (!previewDocument || previewDocument.documentElement.dataset.studioWired === 'true') return;
   previewDocument.documentElement.dataset.studioWired = 'true';
-  let pointerStart = null;
-  let touchHandledUntil = 0;
-  const selectElement = (event) => {
-    if (previewMode !== 'edit') return;
-    const editable = event.target.closest?.('[data-edit-path]'); if (!editable) return;
-    event.preventDefault(); event.stopPropagation();
-    previewDocument.querySelectorAll('.admin-selected').forEach((item) => item.classList.remove('admin-selected'));
-    editable.classList.add('admin-selected'); selectedPath = editable.dataset.editPath; activePanel = ''; renderProjectList(); renderInspector(); revealInspector();
-  };
-  previewDocument.addEventListener('pointerdown', (event) => {
-    if (event.pointerType === 'touch' || event.pointerType === 'pen') pointerStart = { x:event.clientX, y:event.clientY, id:event.pointerId };
-  }, true);
-  previewDocument.addEventListener('pointerup', (event) => {
-    if (!pointerStart || pointerStart.id !== event.pointerId) return;
-    const moved = Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y);
-    pointerStart = null;
-    if (moved > 12) return;
-    touchHandledUntil = performance.now() + 700;
-    selectElement(event);
-  }, true);
-  previewDocument.addEventListener('pointercancel', () => { pointerStart = null; }, true);
-  previewDocument.addEventListener('click', (event) => {
-    if (performance.now() < touchHandledUntil) { if (previewMode === 'edit' && event.target.closest?.('[data-edit-path]')) { event.preventDefault(); event.stopPropagation(); } return; }
-    selectElement(event);
-  }, true);
-  previewDocument.addEventListener('input', (event) => {
-    if (previewMode !== 'edit') return;
-    const editable = event.target.closest?.('[data-edit-inline]'); if (!editable) return;
-    if (inlineSessionPath !== editable.dataset.editPath) { pushHistory(); inlineSessionPath = editable.dataset.editPath; }
-    setPath(editable.dataset.editPath, editable.textContent); markChanged(false);
-  });
 }
 function navigatePreview(href, pageId) {
   activePage = pageId || activePage; dom.frame.src = href;
@@ -142,7 +128,8 @@ function field(label, path, type = 'text', options = {}) {
   if (type === 'textarea') return `<label class="field"><span>${label}</span><textarea data-path="${path}" rows="${options.rows || 4}">${encode(value)}</textarea></label>`;
   if (type === 'select') return `<label class="field"><span>${label}</span><select data-path="${path}">${options.choices.map(([key, text]) => `<option value="${key}" ${String(value) === key ? 'selected' : ''}>${text}</option>`).join('')}</select></label>`;
   if (type === 'checkbox') return `<label class="field field--check"><span><input type="checkbox" data-path="${path}" ${value ? 'checked' : ''} /> ${label}</span></label>`;
-  if (type === 'range') return `<label class="field"><span>${label}</span><div class="range-row"><input type="range" min="${options.min || 25}" max="${options.max || 100}" step="${options.step || 5}" value="${Number(value) || options.defaultValue || 100}" data-path="${path}" /><output>${Number(value) || options.defaultValue || 100}%</output></div></label>`;
+  if (type === 'range') { const unit = options.unit || '%'; const parsed = Number(value); const amount = Number.isFinite(parsed) ? parsed : (options.defaultValue ?? 100); return `<label class="field"><span>${label}</span><div class="range-row"><input type="range" min="${options.min ?? 25}" max="${options.max ?? 100}" step="${options.step ?? 5}" value="${amount}" data-path="${path}" data-unit="${unit}" /><output>${amount}${unit}</output></div></label>`; }
+  if (type === 'color') { const color = /^#[0-9a-f]{6}$/i.test(value) ? value : (options.defaultValue || '#2a1718'); return `<label class="field"><span>${label}</span><input type="color" data-path="${path}" value="${color}" /></label>`; }
   return `<label class="field"><span>${label}</span><input type="${type}" data-path="${path}" value="${encode(value)}" ${options.placeholder ? `placeholder="${encode(options.placeholder)}"` : ''} /></label>`;
 }
 function imageControl(path, label = 'Image') {
@@ -156,6 +143,23 @@ function choices(label, path, values) {
 }
 function blockControls(basePath) {
   return `<div class="form-section"><h3>Ajouter un bloc</h3><div class="add-blocks"><button data-add-block="text" data-block-base="${basePath}">+ Texte</button><button data-add-block="lead" data-block-base="${basePath}">+ Grand texte</button><button data-add-block="quote" data-block-base="${basePath}">+ Citation</button><button data-add-block="image" data-block-base="${basePath}">+ Image</button><button data-add-block="divider" data-block-base="${basePath}">+ Ligne</button><button data-add-block="spacer" data-block-base="${basePath}">+ Espace</button></div></div>`;
+}
+function contentLabel(item, fallback = 'Élément') {
+  if (item.type === 'image' || item.src) return item.caption || item.alt || 'Image';
+  if (item.type === 'quote') return 'Citation';
+  if (item.type === 'divider') return 'Ligne';
+  if (item.type === 'spacer') return 'Espace';
+  return item.text ? item.text.slice(0, 42) : fallback;
+}
+function contentOutline(basePath, items = [], title = 'Ordre') {
+  if (!items.length) return '';
+  return `<div class="form-section"><h3>${title}</h3><p class="form-note">Glisse un élément pour le placer, ou utilise les flèches dans ses propriétés.</p><div class="content-outline" data-sort-base="${basePath}">${items.map((item, index) => `<button class="content-outline__row" draggable="true" data-sort-index="${index}" data-select-path="${basePath}.${index}"><span class="drag-handle" aria-hidden="true">⋮⋮</span><span>${encode(contentLabel(item, `${title} ${index + 1}`))}</span><span aria-hidden="true">›</span></button>`).join('')}</div></div>`;
+}
+function styleBlockControls(path, block) {
+  const isImage = block.type === 'image';
+  const positioning = `<div class="form-section"><h3>Position et dimensions</h3>${field('Largeur', `${path}.width`, 'range', { min:25, max:100, step:5, defaultValue:100 })}${field('Placement horizontal', `${path}.align`, 'select', { choices: [['left','Gauche'],['center','Centre'],['right','Droite']] })}${field('Espace après', `${path}.spacing`, 'range', { min:0, max:240, step:4, defaultValue:36, unit:'px' })}${isImage ? field('Cadre de l’image', `${path}.format`, 'select', { choices: [['original','Format d’origine'],['landscape','Paysage'],['portrait','Portrait'],['square','Carré']] }) : ''}</div>`;
+  if (isImage) return positioning + choices('Coins', `${path}.radius`, [['none','Carrés'],['soft','Doux'],['top-right','Angle'],['diagonal','Diagonal'],['all','Arrondis'],['pill','Pilule']]);
+  return `${positioning}<div class="form-section"><h3>Texte</h3>${field('Alignement', `${path}.textAlign`, 'select', { choices: [['left','À gauche'],['center','Centré'],['right','À droite'],['justify','Justifié']] })}${field('Police', `${path}.fontFamily`, 'select', { choices: [['sans','Sans sérif'],['serif','Éditoriale'],['mono','Monospace']] })}${field('Taille', `${path}.fontSize`, 'range', { min:14, max:96, step:1, defaultValue:block.style === 'lead' ? 48 : 18, unit:'px' })}${field('Couleur du texte', `${path}.textColor`, 'select', { choices: [['inherit','Par défaut'],['ink','Texte de la palette'],['accent','Accent'],['paper','Claire'],['custom','Personnalisée']] })}${field('Couleur personnalisée', `${path}.color`, 'color', { defaultValue:'#2a1718' })}</div><div class="form-section"><h3>Zone colorée</h3>${field('Fond', `${path}.surface`, 'select', { choices: [['none','Aucun fond'],['paper','Fond principal'],['soft','Fond doux'],['ink','Foncé'],['accent','Accent'],['custom','Personnalisé']] })}${field('Couleur personnalisée', `${path}.background`, 'color', { defaultValue:'#f3ede3' })}${field('Marge intérieure', `${path}.padding`, 'range', { min:0, max:120, step:4, defaultValue:0, unit:'px' })}${field('Hauteur minimale', `${path}.minHeight`, 'range', { min:0, max:520, step:10, defaultValue:0, unit:'px' })}</div>${choices('Coins', `${path}.radius`, [['none','Carrés'],['soft','Doux'],['top-right','Angle'],['diagonal','Diagonal'],['all','Arrondis'],['pill','Pilule']])}`;
 }
 
 function renderSiteField(path, label) {
@@ -181,13 +185,14 @@ function renderProject(index) {
     ${choices('Coins de la couverture', `${base}.coverRadius`, [['none','Carrés'],['soft','Doux'],['top-right','Angle'],['diagonal','Diagonal'],['all','Arrondis'],['pill','Pilule']])}
     <div class="form-section"><h3>Dimensions et cadrage</h3>${field('Largeur', `${base}.width`, 'range')}${field('Position', `${base}.objectPosition`, 'select', { choices: [['center','Centre'],['top','Haut'],['bottom','Bas'],['left','Gauche'],['right','Droite']] })}</div>
     <div class="form-section"><h3>Images du projet (${project.media?.length || 0})</h3><div class="list-editor">${(project.media || []).map((item, mediaIndex) => `<button class="page-button" data-select-path="${base}.media.${mediaIndex}"><span>▧</span><span>${encode(item.caption || item.alt || `Image ${mediaIndex + 1}`)}</span></button>`).join('')}</div><button class="button" data-add-project-image="${index}">+ Ajouter une image</button></div>
-    ${blockControls(`${base}.blocks`)}<div class="form-section"><h3>Organisation</h3><div class="field-row"><button class="button" data-move-path="projects.${index}" data-delta="-1">↑ Monter</button><button class="button" data-move-path="projects.${index}" data-delta="1">↓ Descendre</button></div><button class="button" data-duplicate-project="${index}">Dupliquer le projet</button></div><button class="danger-button" data-delete-project="${index}">Supprimer ce projet</button>`;
+    ${contentOutline(`${base}.media`, project.media || [], 'Ordre des images')}${blockControls(`${base}.blocks`)}${contentOutline(`${base}.blocks`, project.blocks || [], 'Ordre des blocs')}<div class="form-section"><h3>Organisation</h3><div class="field-row"><button class="button" data-move-path="projects.${index}" data-delta="-1">↑ Monter</button><button class="button" data-move-path="projects.${index}" data-delta="1">↓ Descendre</button></div><button class="button" data-duplicate-project="${index}">Dupliquer le projet</button></div><button class="danger-button" data-delete-project="${index}">Supprimer ce projet</button>`;
 }
 function renderMedia(projectIndex, mediaIndex) {
   const base = `projects.${projectIndex}.media.${mediaIndex}`; const item = getPath(base); if (!item) return renderProject(projectIndex);
   dom.inspectorTitle.textContent = `Image ${mediaIndex + 1}`;
   dom.inspector.innerHTML = `${imageControl(`${base}.src`)}<div class="form-section"><h3>Texte</h3>${field('Légende', `${base}.caption`, 'textarea', { rows: 3 })}${field('Description accessible', `${base}.alt`, 'textarea', { rows: 3 })}</div>
     ${choices('Taille', `${base}.kind`, [['wide','Large'],['process','Moyenne'],['detail','Petite'],['cutout','Détourée'],['plan','Plan']])}
+    ${field('Cadre de l’image', `${base}.format`, 'select', { choices: [['original','Format d’origine'],['landscape','Paysage'],['portrait','Portrait'],['square','Carré']] })}
     ${choices('Placement', `${base}.align`, [['left','Gauche'],['center','Centre'],['right','Droite']])}
     ${choices('Coins', `${base}.radius`, [['none','Carrés'],['soft','Doux'],['top-right','Angle'],['diagonal','Diagonal'],['all','Arrondis'],['pill','Pilule']])}
     <div class="form-section"><h3>Dimensions et cadrage</h3>${field('Largeur', `${base}.width`, 'range')}${field('Position', `${base}.objectPosition`, 'select', { choices: [['center','Centre'],['top','Haut'],['bottom','Bas'],['left','Gauche'],['right','Droite']] })}</div>
@@ -196,16 +201,16 @@ function renderMedia(projectIndex, mediaIndex) {
 function renderGalleryItem(index) {
   const base = `site.gallery.items.${index}`; dom.inspectorTitle.textContent = `Galerie · ${index + 1}`;
   dom.inspector.innerHTML = `${imageControl(`${base}.src`)}<div class="form-section"><h3>Informations</h3>${field('Catégorie', `${base}.category`)}${field('Légende', `${base}.caption`, 'textarea')}${field('Crédit / source', `${base}.credit`)}${field('Description accessible', `${base}.alt`, 'textarea')}</div>
-    ${choices('Taille', `${base}.size`, [['small','Petite'],['medium','Moyenne'],['large','Grande']])}${choices('Coins', `${base}.radius`, [['none','Carrés'],['soft','Doux'],['top-right','Angle'],['diagonal','Diagonal'],['all','Arrondis'],['pill','Pilule']])}
+    ${choices('Taille', `${base}.size`, [['small','Petite'],['medium','Moyenne'],['large','Grande']])}${field('Cadre de l’image', `${base}.format`, 'select', { choices: [['original','Format d’origine'],['landscape','Paysage'],['portrait','Portrait'],['square','Carré']] })}${choices('Coins', `${base}.radius`, [['none','Carrés'],['soft','Doux'],['top-right','Angle'],['diagonal','Diagonal'],['all','Arrondis'],['pill','Pilule']])}
     <div class="form-section">${field('Largeur', `${base}.width`, 'range')}${field('Position', `${base}.objectPosition`, 'select', { choices: [['center','Centre'],['top','Haut'],['bottom','Bas'],['left','Gauche'],['right','Droite']] })}<div class="field-row"><button class="button" data-move-path="${base}" data-delta="-1">↑ Avant</button><button class="button" data-move-path="${base}" data-delta="1">↓ Après</button></div><button class="danger-button" data-remove-path="${base}">Retirer de la galerie</button></div>`;
 }
 function renderBlock(path) {
   const block = getPath(path); if (!block) return renderEmpty(); dom.inspectorTitle.textContent = 'Bloc de contenu';
   let fields = '';
-  if (block.type === 'image') fields = imageControl(`${path}.src`) + field('Légende', `${path}.caption`, 'textarea') + field('Description accessible', `${path}.alt`, 'textarea') + field('Largeur', `${path}.width`, 'range') + field('Position', `${path}.objectPosition`, 'select', { choices: [['center','Centre'],['top','Haut'],['bottom','Bas'],['left','Gauche'],['right','Droite']] }) + choices('Coins', `${path}.radius`, [['none','Carrés'],['soft','Doux'],['top-right','Angle'],['diagonal','Diagonal'],['all','Arrondis']]);
-  else if (block.type === 'spacer') fields = field('Hauteur', `${path}.height`, 'range', { min:20,max:240,step:10,defaultValue:80 });
-  else if (block.type !== 'divider') fields = field('Texte', `${path}.text`, 'textarea', { rows: 6 });
-  dom.inspector.innerHTML = `<div class="form-section"><h3>${encode(block.type)}</h3>${fields}</div><div class="form-section"><div class="field-row"><button class="button" data-move-path="${path}" data-delta="-1">↑ Avant</button><button class="button" data-move-path="${path}" data-delta="1">↓ Après</button></div><button class="danger-button" data-remove-path="${path}">Supprimer ce bloc</button></div>`;
+  if (block.type === 'image') fields = imageControl(`${path}.src`) + `<div class="form-section"><h3>Texte</h3>${field('Légende', `${path}.caption`, 'textarea')}${field('Description accessible', `${path}.alt`, 'textarea')}</div>` + styleBlockControls(path, block);
+  else if (block.type === 'spacer') fields = field('Hauteur', `${path}.height`, 'range', { min:20,max:240,step:10,defaultValue:80,unit:'px' });
+  else if (block.type !== 'divider') fields = `<div class="form-section"><h3>Contenu</h3>${field('Texte', `${path}.text`, 'textarea', { rows: 6 })}</div>` + styleBlockControls(path, block);
+  dom.inspector.innerHTML = `${block.type === 'divider' ? '' : `<div class="form-section"><h3>${encode(block.type)}</h3>${fields}${field('Masquer temporairement', `${path}.hidden`, 'checkbox')}</div>`}<div class="form-section"><h3>Organisation</h3><div class="field-row"><button class="button" data-move-path="${path}" data-delta="-1">↑ Avant</button><button class="button" data-move-path="${path}" data-delta="1">↓ Après</button></div><button class="button" data-duplicate-path="${path}">Dupliquer ce bloc</button><button class="danger-button" data-remove-path="${path}">Supprimer ce bloc</button></div>`;
 }
 function renderDesign() {
   dom.inspectorTitle.textContent = 'Design & palettes'; const design = data.site.design;
@@ -241,7 +246,8 @@ async function loadMessages() { const target = $('#message-list'); if (!target |
 function renderPagePanel(pageId) {
   const definition = pageDefinitions.find(item => item.id === pageId); dom.inspectorTitle.textContent = definition?.label || 'Page';
   const heading = pageId === 'notFound' ? 'Page 404' : `Page ${definition?.label || ''}`;
-  dom.inspector.innerHTML = `<div class="form-section"><h3>${encode(heading)}</h3><p class="empty-state">Clique directement sur un texte ou une image dans la page pour le modifier.</p></div>${blockControls(`site.customBlocks.${pageId}`)}`;
+  const base = `site.customBlocks.${pageId}`; const blocks = getPath(base) || [];
+  dom.inspector.innerHTML = `<div class="form-section"><h3>${encode(heading)}</h3><p class="empty-state">Clique directement sur un texte ou une image dans la page pour le modifier.</p></div>${blockControls(base)}${contentOutline(base, blocks, 'Ordre des blocs')}`;
 }
 function renderEmpty() { dom.inspectorTitle.textContent = 'Propriétés'; dom.inspector.innerHTML = '<div class="empty-state"><span>✦</span><p>Sélectionne un texte, une image ou un projet dans la prévisualisation.</p></div>'; }
 function renderInspector() {
@@ -305,7 +311,7 @@ async function publish() {
     const response = await fetch(`${apiBase}/api/publish`, { method:'POST', headers:authHeaders({ 'Content-Type':'application/json', 'X-Mayin-CSRF':csrf }), body:JSON.stringify({ site:payload.site, projects:{ projects:payload.projects }, files:payload.files, message:'Mise à jour depuis le Studio May’in' }) });
     if (response.status === 401) return showLogin();
     const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Publication refusée');
-    data.site = payload.site; data.projects = payload.projects; localStorage.removeItem('mayin-studio-draft'); undoStack=[]; redoStack=[]; updateHistoryButtons(); setSaveState('Publié'); showToast('Le site est publié. Mise en ligne dans quelques instants.');
+    data.site = payload.site; data.projects = payload.projects; publishedData = clone(data); localStorage.removeItem('mayin-studio-draft'); undoStack=[]; redoStack=[]; updateHistoryButtons(); setSaveState('Publié'); showToast('Le site est publié. Mise en ligne dans quelques instants.');
   } catch (error) { setSaveState('Échec'); showToast(error.message || 'Échec de la publication', true); }
   finally { dom.publish.disabled = false; dom.publish.textContent = 'Publier'; }
 }
@@ -321,12 +327,12 @@ async function boot() {
     const fragment = new URLSearchParams(location.hash.slice(1));
     if (fragment.has('session')) { sessionToken = fragment.get('session'); sessionStorage.setItem('mayin-session', sessionToken); history.replaceState(null, '', location.pathname + location.search); }
     const publicData = await loadPublicData();
-    if (localMode) { data = publicData; currentUser = { login:'local' }; const draft = localStorage.getItem('mayin-studio-draft'); if (draft) data = JSON.parse(draft); return showStudio(); }
+    if (localMode) { data = publicData; publishedData = clone(publicData); currentUser = { login:'local' }; const draft = localStorage.getItem('mayin-studio-draft'); if (draft) { data = JSON.parse(draft); setSaveState('Brouillon local · non publié'); } return showStudio(); }
     if (!apiBase || apiBase.includes('REMPLACER')) return showLogin();
     const auth = await fetch(`${apiBase}/auth/me`, { headers:authHeaders() }); if (!auth.ok) return showLogin();
     const account = await auth.json(); currentUser = account.user; csrf = account.csrf;
     const response = await fetch(`${apiBase}/api/content`, { headers:authHeaders() }); if (!response.ok) throw new Error('Contenu inaccessible');
-    data = await response.json(); const draft = localStorage.getItem('mayin-studio-draft'); if (draft) { data = JSON.parse(draft); setSaveState('Brouillon restauré'); }
+    data = await response.json(); publishedData = clone(data); const draft = localStorage.getItem('mayin-studio-draft'); if (draft) { data = JSON.parse(draft); setSaveState('Brouillon local · non publié'); }
     showStudio();
   } catch (error) { console.error(error); showLogin(); showToast('Le service d’administration n’est pas encore disponible', true); }
 }
@@ -336,10 +342,12 @@ addEventListener('message', (event) => {
   if (event.source !== dom.frame.contentWindow || !event.data) return;
   if (event.data.type === 'mayin:preview-ready') sendDraft();
   if (event.data.type === 'mayin:select') { selectedPath = event.data.path; activePanel = ''; renderProjectList(); renderInspector(); revealInspector(); }
-  if (event.data.type === 'mayin:inline') { if (inlineSessionPath !== event.data.path) { pushHistory(); inlineSessionPath = event.data.path; } setPath(event.data.path, event.data.value); markChanged(false); }
+  if (event.data.type === 'mayin:inline') { if (inlineSessionPath !== event.data.path) { pushHistory(); inlineSessionPath = event.data.path; } setPath(event.data.path, event.data.value); markChanged(false, false, false); }
+  if (event.data.type === 'mayin:inline-commit') { if (inlineSessionPath === event.data.path) { inlineSessionPath = ''; renderProjectList(); syncPreviewSoon(0); } }
 });
 dom.loginButton.addEventListener('click', () => { if (!apiBase || apiBase.includes('REMPLACER')) return showToast('La connexion sécurisée est en cours de configuration', true); location.href = `${apiBase}/auth/login?returnTo=${encodeURIComponent(location.href)}`; });
 dom.publish.addEventListener('click', publish); dom.undo.addEventListener('click', undo); dom.redo.addEventListener('click', redo);
+dom.discardDraft.addEventListener('click', discardDraft);
 dom.previewPublic.addEventListener('click', () => open(data.site.domain || '../index.html', '_blank', 'noopener'));
 $$('.segmented').forEach((button) => button.addEventListener('click', () => setPreviewMode(button.dataset.mode)));
 $$('[data-viewport]').forEach((button) => button.addEventListener('click', () => { $$('[data-viewport]').forEach(item=>item.classList.toggle('is-active',item===button)); dom.shell.className = `preview-shell preview-shell--${button.dataset.viewport}`; }));
@@ -363,7 +371,7 @@ document.addEventListener('click', (event) => { if (!event.target.closest('.acco
 dom.accountMenu.addEventListener('click', (event) => { const action = event.target.closest('[data-account-action]')?.dataset.accountAction; if (!action) return; if (action === 'site') return dom.previewPublic.click(); if (action === 'dashboard') { dom.accountMenu.hidden=true; openDashboard(); return; } if (action === 'draft') return showToast(localStorage.getItem('mayin-studio-draft') ? 'Un brouillon est conservé sur cet appareil.' : 'Aucun brouillon en attente.'); if (action === 'logout') { if (localMode) return showToast('Mode local'); sessionStorage.removeItem('mayin-session'); sessionToken=''; location.reload(); } });
 dom.imageInput.addEventListener('change', () => handleUpload(dom.imageInput.files[0]));
 dom.inspector.addEventListener('focusin', (event) => { if (event.target.matches('[data-path]')) inlineSessionPath=''; });
-dom.inspector.addEventListener('input', (event) => { if (event.target.type === 'range') event.target.nextElementSibling.textContent=`${event.target.value}%`; });
+dom.inspector.addEventListener('input', (event) => { if (event.target.type === 'range') event.target.nextElementSibling.textContent=`${event.target.value}${event.target.dataset.unit || '%'}`; });
 dom.inspector.addEventListener('change', (event) => {
   const input=event.target.closest('[data-path]'); if(!input)return; let value=input.type==='checkbox'?input.checked:input.value; if(input.type==='range')value=Number(value); pushHistory(); setPath(input.dataset.path,value); markChanged(false); sendDraft();
 });
@@ -372,10 +380,11 @@ dom.inspector.addEventListener('click', (event) => {
   const choice=event.target.closest('[data-choice-path]'); if(choice){mutate(choice.dataset.choicePath,choice.dataset.choiceValue);return;}
   const select=event.target.closest('[data-select-path]'); if(select){selectedPath=select.dataset.selectPath;activePanel='';renderInspector();return;}
   const remove=event.target.closest('[data-remove-path]'); if(remove){pushHistory();deletePath(remove.dataset.removePath);selectedPath='';markChanged();return;}
+  const duplicatePath=event.target.closest('[data-duplicate-path]'); if(duplicatePath){const path=duplicatePath.dataset.duplicatePath;const parts=pathParts(path);const index=parts.pop();const list=parts.reduce((item,part)=>item[part],data);if(Array.isArray(list)){pushHistory();list.splice(index+1,0,clone(list[index]));selectedPath=`${parts.join('.')}.${index+1}`;markChanged();}return;}
   const move=event.target.closest('[data-move-path]'); if(move){moveItem(move.dataset.movePath,move.dataset.delta);return;}
   const addMedia=event.target.closest('[data-add-project-image]'); if(addMedia)return startUpload({type:'project-media',index:Number(addMedia.dataset.addProjectImage)});
   if(event.target.closest('[data-add-gallery-image]'))return startUpload({type:'gallery'});
-  const addBlock=event.target.closest('[data-add-block]'); if(addBlock){const base=addBlock.dataset.blockBase;const type=addBlock.dataset.addBlock;if(type==='image')return startUpload({type:'block-image',base});pushHistory();const blocks=getPath(base)||[];const block=type==='quote'?{type,text:'Une citation à compléter.'}:type==='divider'?{type}:type==='spacer'?{type,height:80}:{type:'text',style:type==='lead'?'lead':'body',text:'Nouveau texte à compléter.'};blocks.push(block);selectedPath=`${base}.${blocks.length-1}`;activePanel='';markChanged();return;}
+  const addBlock=event.target.closest('[data-add-block]'); if(addBlock){const base=addBlock.dataset.blockBase;const type=addBlock.dataset.addBlock;if(type==='image')return startUpload({type:'block-image',base});pushHistory();const blocks=getPath(base)||[];const defaults={width:100,align:'left',spacing:36,textAlign:'left',fontFamily:'sans',fontSize:type==='lead'?48:18,textColor:'inherit',surface:'none',padding:0,minHeight:0,radius:'soft'};const block=type==='quote'?{...defaults,type,text:'Une citation à compléter.',fontFamily:'serif'}:type==='divider'?{type}:type==='spacer'?{type,height:80}:{...defaults,type:'text',style:type==='lead'?'lead':'body',text:'Nouveau texte à compléter.'};blocks.push(block);selectedPath=`${base}.${blocks.length-1}`;activePanel='';markChanged();return;}
   const del=event.target.closest('[data-delete-project]'); if(del){pushHistory();data.projects.splice(Number(del.dataset.deleteProject),1);selectedPath='';markChanged();navigatePreview('../projets.html?admin-preview=1','projects');return;}
   const duplicate=event.target.closest('[data-duplicate-project]'); if(duplicate){pushHistory();const index=Number(duplicate.dataset.duplicateProject);const copy=clone(data.projects[index]);copy.title=`${copy.title} — copie`;copy.slug=`${copy.slug}-copie-${Date.now().toString(36)}`;data.projects.splice(index+1,0,copy);selectedPath=`projects.${index+1}`;markChanged();return;}
   const palette=event.target.closest('[data-palette]'); if(palette){mutate('site.design.activePalette',palette.dataset.palette);return;}
@@ -384,6 +393,25 @@ dom.inspector.addEventListener('click', (event) => {
   if(event.target.closest('[data-add-social]')){pushHistory();data.site.socialLinks.push({label:'Nouveau lien',url:'https://',visible:true});markChanged();return;}
   if(event.target.closest('[data-add-gallery-category]')){pushHistory();data.site.gallery.categories.push('Nouvelle catégorie');markChanged();return;}
   if(event.target.closest('[data-export]')){const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download=`mayin-sauvegarde-${new Date().toISOString().slice(0,10)}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);showToast('Sauvegarde téléchargée');}
+});
+let draggedOutlineItem = null;
+dom.inspector.addEventListener('dragstart', (event) => {
+  const row = event.target.closest('[data-sort-index]'); const container = event.target.closest('[data-sort-base]'); if (!row || !container) return;
+  draggedOutlineItem = { base: container.dataset.sortBase, index: Number(row.dataset.sortIndex) }; row.classList.add('is-dragging'); event.dataTransfer.effectAllowed = 'move';
+});
+dom.inspector.addEventListener('dragend', (event) => { event.target.closest('[data-sort-index]')?.classList.remove('is-dragging'); draggedOutlineItem = null; });
+dom.inspector.addEventListener('dragover', (event) => {
+  const row = event.target.closest('[data-sort-index]'); const container = event.target.closest('[data-sort-base]'); if (!draggedOutlineItem || !row || !container || container.dataset.sortBase !== draggedOutlineItem.base) return;
+  event.preventDefault(); event.dataTransfer.dropEffect = 'move';
+});
+dom.inspector.addEventListener('drop', (event) => {
+  const row = event.target.closest('[data-sort-index]'); const container = event.target.closest('[data-sort-base]'); if (!draggedOutlineItem || !row || !container || container.dataset.sortBase !== draggedOutlineItem.base) return;
+  event.preventDefault(); const target = Number(row.dataset.sortIndex); moveItemTo(draggedOutlineItem.base, draggedOutlineItem.index, target); draggedOutlineItem = null;
+});
+document.addEventListener('keydown', (event) => {
+  if (!(event.ctrlKey || event.metaKey) || event.target.matches('input,textarea,[contenteditable="true"]')) return;
+  if (event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); }
+  if (event.key.toLowerCase() === 'y') { event.preventDefault(); redo(); }
 });
 
 boot();
