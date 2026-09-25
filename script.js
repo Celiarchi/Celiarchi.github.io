@@ -7,7 +7,7 @@ const isAdminPreview = previewParams.get('admin-preview') === '1' && window.pare
 let previewEditMode = true;
 let runtime = { site: null, projects: [] };
 
-document.head.insertAdjacentHTML('beforeend', '<link rel="stylesheet" href="dynamic.css"><link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="manifest" href="site.webmanifest">');
+document.head.insertAdjacentHTML('beforeend', '<link rel="stylesheet" href="dynamic.css?v=8"><link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="manifest" href="site.webmanifest">');
 
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' })[character]);
 const getJson = async (path) => { const response = await fetch(path, { cache: 'no-store' }); if (!response.ok) throw new Error('Contenu indisponible'); return response.json(); };
@@ -316,16 +316,19 @@ function prepareAdminPreview() {
 if (isAdminPreview) {
   let touchStart = null;
   let touchSelectionUntil = 0;
+  let selectedPreviewElement = null;
   const selectPreviewElement = (event) => {
     if (!previewEditMode) return;
     const editable = event.target.closest('[data-edit-path]');
     if (!editable) return;
-    event.preventDefault();
-    event.stopPropagation();
-    document.querySelectorAll('.admin-selected').forEach((item) => item.classList.remove('admin-selected'));
+    const inline = editable.dataset.editInline === 'true';
+    const allowsNativeClick = inline && !editable.closest('a, button');
+    if (!allowsNativeClick) { event.preventDefault(); event.stopPropagation(); }
+    if (selectedPreviewElement && selectedPreviewElement !== editable) selectedPreviewElement.classList.remove('admin-selected');
     editable.classList.add('admin-selected');
+    selectedPreviewElement = editable;
     window.parent.postMessage({ type: 'mayin:select', path: editable.dataset.editPath, label: editable.dataset.editLabel || 'Élément' }, location.origin);
-    if (editable.dataset.editInline) requestAnimationFrame(() => editable.focus({ preventScroll: true }));
+    if (inline) editable.focus({ preventScroll: true });
   };
   document.addEventListener('pointerdown', (event) => {
     if (event.pointerType === 'touch' || event.pointerType === 'pen') touchStart = { x: event.clientX, y: event.clientY, id: event.pointerId };

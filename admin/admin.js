@@ -123,6 +123,14 @@ function renderProjectList() {
   dom.projectList.innerHTML = data.projects.map((project, index) => { const cover = project.cover?.startsWith('data:') ? project.cover : `../${project.cover || 'favicon.svg'}`; const open = expandedProjectIndex === index || selectedPath.startsWith(`projects.${index}`); return `<div class="project-tree"><button class="project-row${selectedPath.startsWith(`projects.${index}`) ? ' is-active' : ''}" data-project-index="${index}"><img src="${encode(cover)}" alt="" /><span>${encode(project.title)}</span><small>${open ? '⌄' : '›'}</small></button>${open ? `<div class="project-media-list"><button class="project-media-row" data-project-index="${index}" data-project-media-index="cover"><span>◆</span><span>Couverture</span></button>${(project.media || []).map((item, mediaIndex) => { const source = item.src?.startsWith('data:') ? item.src : `../${item.src || 'favicon.svg'}`; return `<button class="project-media-row" data-project-index="${index}" data-project-media-index="${mediaIndex}"><img src="${encode(source)}" alt="" /><span>${encode(item.caption || item.alt || `Image ${mediaIndex + 1}`)}</span></button>`; }).join('')}<button class="project-media-row project-media-row--add" data-add-project-image="${index}">+ Ajouter une image</button></div>` : ''}</div>`; }).join('');
 }
 function renderAllAdmin() { renderPageList(); renderProjectList(); renderInspector(); sendDraft(); }
+function selectPreviewPath(path) {
+  const previousPath = selectedPath;
+  const previousProject = pathParts(previousPath)[0] === 'projects' ? pathParts(previousPath)[1] : null;
+  const nextProject = pathParts(path)[0] === 'projects' ? pathParts(path)[1] : null;
+  selectedPath = path; activePanel = '';
+  if (typeof nextProject === 'number' && nextProject !== previousProject) { expandedProjectIndex = nextProject; renderProjectList(); }
+  renderInspector(); revealInspector();
+}
 
 function field(label, path, type = 'text', options = {}) {
   const value = getPath(path) ?? '';
@@ -319,7 +327,7 @@ async function publish() {
 }
 
 function showLogin() { dom.boot.hidden = true; dom.studio.hidden = true; dom.login.hidden = false; }
-function showStudio() { dom.boot.hidden = true; dom.login.hidden = true; dom.studio.hidden = false; dom.accountName.textContent = currentUser?.login || 'Administratrice'; dom.studioVersion.textContent = data.site?.studioVersion || '—'; if (currentUser?.avatar) { dom.accountAvatar.src = currentUser.avatar; dom.accountAvatar.hidden = false; } loadDashboard().then(() => { if (activePanel === 'dashboard') renderDashboard(); }); renderAllAdmin(); setTimeout(() => { syncPreview(); wirePreviewDocument(); }, 120); }
+function showStudio() { dom.boot.hidden = true; dom.login.hidden = true; dom.studio.hidden = false; dom.accountName.textContent = currentUser?.login || 'Administratrice'; dom.studioVersion.textContent = data.site?.studioVersion || '1.2.2'; if (currentUser?.avatar) { dom.accountAvatar.src = currentUser.avatar; dom.accountAvatar.hidden = false; } loadDashboard().then(() => { if (activePanel === 'dashboard') renderDashboard(); }); renderAllAdmin(); setTimeout(() => { syncPreview(); wirePreviewDocument(); }, 120); }
 async function loadPublicData() {
   const [site, projects] = await Promise.all([fetch('../content/site.json',{cache:'no-store'}).then(r=>r.json()), fetch('../content/projects.json',{cache:'no-store'}).then(r=>r.json())]);
   apiBase = site.admin?.apiBase || ''; return { site, projects: projects.projects };
@@ -343,9 +351,9 @@ dom.frame.addEventListener('load', () => setTimeout(() => { syncPreview(); wireP
 addEventListener('message', (event) => {
   if (event.source !== dom.frame.contentWindow || !event.data) return;
   if (event.data.type === 'mayin:preview-ready') sendDraft();
-  if (event.data.type === 'mayin:select') { selectedPath = event.data.path; activePanel = ''; renderProjectList(); renderInspector(); revealInspector(); }
+  if (event.data.type === 'mayin:select') selectPreviewPath(event.data.path);
   if (event.data.type === 'mayin:inline') { if (inlineSessionPath !== event.data.path) { pushHistory(); inlineSessionPath = event.data.path; } setPath(event.data.path, event.data.value); markChanged(false, false, false); }
-  if (event.data.type === 'mayin:inline-commit') { if (inlineSessionPath === event.data.path) { inlineSessionPath = ''; renderProjectList(); syncPreviewSoon(0); } }
+  if (event.data.type === 'mayin:inline-commit') { if (inlineSessionPath === event.data.path) { const projectIndex = pathParts(event.data.path)[0] === 'projects' ? pathParts(event.data.path)[1] : null; inlineSessionPath = ''; if (typeof projectIndex === 'number') renderProjectList(); } }
 });
 dom.loginButton.addEventListener('click', () => { if (!apiBase || apiBase.includes('REMPLACER')) return showToast('La connexion sécurisée est en cours de configuration', true); location.href = `${apiBase}/auth/login?returnTo=${encodeURIComponent(location.href)}`; });
 dom.publish.addEventListener('click', publish); dom.undo.addEventListener('click', undo); dom.redo.addEventListener('click', redo);
