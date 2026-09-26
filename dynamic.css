@@ -16,7 +16,8 @@
 .project-hero .project-back{margin-bottom:30px}
 .project-hero img{width:100%;height:min(60svh,660px);background:transparent;border-radius:24px 42px 24px 24px}
 .project-layout--portrait .project-hero img,.project-layout--square .project-hero img{width:100%;height:min(55svh,600px);background:transparent}
-.project-hero img.project-hero__image--cutout{border-radius:0;object-fit:contain}
+.project-hero img.project-hero__image--cutout{object-fit:contain}
+.project-hero img.radius-none{border-radius:0}.project-hero img.radius-soft{border-radius:22px 38px 22px 22px}.project-hero img.radius-top-right{border-radius:2px 48px 2px 2px}.project-hero img.radius-diagonal{border-radius:36px 2px 36px 2px}.project-hero img.radius-all{border-radius:36px}.project-hero img.radius-pill{border-radius:999px}
 .project-copy{padding:75px 13vw 80px}
 .project-gallery{gap:clamp(36px,5vw,80px) 3vw;align-items:center}
 .project-gallery .project-media img{max-height:min(60svh,660px);width:100%;height:auto;object-fit:contain;border-radius:22px 32px 22px 22px}

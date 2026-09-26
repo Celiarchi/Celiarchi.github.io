@@ -5,9 +5,10 @@ const page = document.body.dataset.page;
 const previewParams = new URLSearchParams(location.search);
 const isAdminPreview = previewParams.get('admin-preview') === '1' && window.parent !== window;
 let previewEditMode = true;
+let previewReadySent = false;
 let runtime = { site: null, projects: [] };
 
-document.head.insertAdjacentHTML('beforeend', '<link rel="stylesheet" href="dynamic.css?v=9"><link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="manifest" href="site.webmanifest">');
+document.head.insertAdjacentHTML('beforeend', '<link rel="stylesheet" href="dynamic.css?v=10"><link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="manifest" href="site.webmanifest">');
 
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' })[character]);
 const getJson = async (path) => { const response = await fetch(path, { cache: 'no-store' }); if (!response.ok) throw new Error('Contenu indisponible'); return response.json(); };
@@ -74,9 +75,9 @@ function applyDesign(site) {
 function renderNavigation(site) {
   if (!navigation) return;
   const current = location.pathname.split('/').pop() || 'index.html';
-  navigation.innerHTML = site.navigation.filter((item) => item.visible !== false).map((item, index) => {
+  navigation.innerHTML = site.navigation.map((item, index) => ({ item, index })).filter(({ item }) => item.visible !== false).map(({ item, index }) => {
     const active = item.href.split('?')[0] === current || (current === '' && item.href === 'index.html');
-    return `<a ${active ? 'aria-current="page"' : ''} href="${escapeHtml(item.href)}" data-edit-path="site.navigation.${index}" data-edit-label="Lien de navigation" data-edit-inline="true">${escapeHtml(item.label)}</a>`;
+    return `<a ${active ? 'aria-current="page"' : ''} href="${escapeHtml(item.href)}" data-edit-path="site.navigation.${index}.label" data-edit-label="Lien de navigation" data-edit-inline="true">${escapeHtml(item.label)}</a>`;
   }).join('');
 }
 
@@ -143,9 +144,9 @@ function applyStructuredData(site) {
 }
 
 function renderSocialLinks(site) {
-  const links = (site.socialLinks || []).filter((item) => item.visible !== false && item.label);
+  const links = (site.socialLinks || []).map((item, index) => ({ item, index })).filter(({ item }) => item.visible !== false && item.label);
   document.querySelectorAll('[data-social-links]').forEach((container) => {
-    container.innerHTML = links.map((item, index) => `<a href="${escapeHtml(item.url || '#')}" ${item.url?.startsWith('http') ? 'target="_blank" rel="noreferrer"' : ''} data-edit-path="site.socialLinks.${index}" data-edit-label="Lien social" data-edit-inline="true">${escapeHtml(item.label)}</a>`).join('<span aria-hidden="true"> · </span>');
+    container.innerHTML = links.map(({ item, index }) => `<a href="${escapeHtml(item.url || '#')}" ${item.url?.startsWith('http') ? 'target="_blank" rel="noreferrer"' : ''} data-edit-path="site.socialLinks.${index}.label" data-edit-label="Lien social" data-edit-inline="true">${escapeHtml(item.label)}</a>`).join('<span aria-hidden="true"> · </span>');
     container.hidden = links.length === 0;
   });
 }
@@ -188,13 +189,15 @@ function paletteValue(style, key, site, customKey = 'customColor') {
   if (key === 'custom') return style[customKey] || '#2a1718';
   return { ink: palette.ink, accent: palette.accent, paper: palette.paper, soft: palette.soft || palette.paper }[key] || '';
 }
-function applyElementStyles(site) {
+function applyElementStyles(site, captureBase = false) {
   document.querySelectorAll('[data-edit-inline]').forEach((element, index) => {
     const styleId = element.dataset.editStyleId || `${page || 'home'}-text-${index}`;
     element.dataset.editStyleId = styleId;
+    if (captureBase || element.dataset.baseHidden === undefined) element.dataset.baseHidden = String(element.hidden);
     const style = site.elementStyles?.[styleId];
-    if (!style) return;
     ['font-family','font-size','text-align','color','background','display','width','max-width','margin-left','margin-right','min-height','padding','border-radius','transform'].forEach((property) => element.style.removeProperty(property));
+    element.hidden = element.dataset.baseHidden === 'true';
+    if (!style) return;
     const number = (value, min, max) => Number.isFinite(Number(value)) ? Math.max(min, Math.min(max, Number(value))) : null;
     const fontSize = number(style.fontSize, 10, 160);
     const width = number(style.width, 20, 100);
@@ -336,9 +339,79 @@ function renderAll(site, projects) {
   if (page === 'gallery') renderGallery(runtime.site);
   renderCustomBlocks(runtime.site);
   renderContactForm(runtime.site);
-  applyElementStyles(runtime.site);
+  applyElementStyles(runtime.site, true);
   startAnonymousAnalytics(runtime.site);
   prepareAdminPreview();
+}
+
+function updatePreviewValue(path, value) {
+  const parts = path.split('.').map((part) => /^\d+$/.test(part) ? Number(part) : part);
+  let owner = runtime;
+  for (const part of parts.slice(0, -1)) {
+    if (owner[part] == null) owner[part] = {};
+    owner = owner[part];
+  }
+  owner[parts.at(-1)] = value;
+  if (path.startsWith('site.elementStyles.')) { applyElementStyles(runtime.site); return; }
+  if (path.startsWith('site.design.')) { applyDesign(runtime.site); applyElementStyles(runtime.site); return; }
+  const matchingText = [...document.querySelectorAll('[data-edit-inline]')].filter((element) => element.dataset.editPath === path);
+  if (matchingText.length && typeof value === 'string') {
+    matchingText.forEach((element) => { if (element !== document.activeElement) element.textContent = value; });
+    return;
+  }
+  if (path === 'site.heroImage') {
+    const hero = document.querySelector('[data-site-image="heroImage"]');
+    if (hero) hero.src = assetSrc(value);
+    return;
+  }
+  const coverMatch = path.match(/^projects\.(\d+)\.(cover|coverKind|coverRadius|width|objectPosition|offsetX|offsetY)$/);
+  if (coverMatch) {
+    const project = runtime.projects[Number(coverMatch[1])];
+    const hero = document.querySelector(`[data-edit-path="projects.${coverMatch[1]}.cover"]`);
+    const card = document.querySelector(`[data-edit-path="projects.${coverMatch[1]}"]`);
+    if (hero) {
+      if (coverMatch[2] === 'cover') hero.src = assetSrc(project.cover);
+      hero.style.cssText = imageStyle(project);
+      hero.classList.toggle('project-hero__image--cutout', project.coverKind === 'cutout');
+      hero.classList.remove('radius-none', 'radius-soft', 'radius-top-right', 'radius-diagonal', 'radius-all', 'radius-pill');
+      hero.classList.add(radiusClass(project.coverRadius || 'soft'));
+    }
+    if (card) {
+      const image = card.querySelector('.project-image');
+      if (coverMatch[2] === 'cover' && image?.querySelector('img')) image.querySelector('img').src = assetSrc(project.cover);
+      if (image) image.style.cssText = imageStyle(project);
+      card.classList.toggle('project-card--cutout', project.coverKind === 'cutout');
+      card.classList.remove('radius-none', 'radius-soft', 'radius-top-right', 'radius-diagonal', 'radius-all', 'radius-pill');
+      card.classList.add(radiusClass(project.coverRadius || 'soft'));
+    }
+    return;
+  }
+  const mediaMatch = path.match(/^projects\.(\d+)\.media\.(\d+)\.(src|radius|kind|format|align|width|objectPosition|offsetX|offsetY)$/);
+  const galleryMatch = path.match(/^site\.gallery\.items\.(\d+)\.(src|radius|size|format|width|objectPosition|offsetX|offsetY)$/);
+  const blockMatch = path.match(/^(site\.customBlocks\.[^.]+\.\d+|projects\.\d+\.blocks\.\d+)\.(src|radius|format|width|align|spacing|fontFamily|fontSize|textAlign|textColor|color|surface|background|padding|minHeight|offsetX|offsetY)$/);
+  if (mediaMatch || galleryMatch || blockMatch) {
+    const base = mediaMatch ? `projects.${mediaMatch[1]}.media.${mediaMatch[2]}` : galleryMatch ? `site.gallery.items.${galleryMatch[1]}` : blockMatch[1];
+    const element = [...document.querySelectorAll('[data-edit-path]')].find((item) => item.dataset.editPath === base);
+    if (!element) return;
+    const item = base.split('.').reduce((current, part) => current?.[part], runtime);
+    const selected = element.classList.contains('admin-selected') ? ' admin-selected' : '';
+    if (path.endsWith('.src')) { const image = element.querySelector('img'); if (image) image.src = assetSrc(value); }
+    if (mediaMatch) {
+      element.style.cssText = imageStyle(item);
+      const placement = item.align || ['left', 'right', 'center'][Number(mediaMatch[2]) % 3];
+      element.className = `project-media project-media--${safeToken(item.kind, 'wide')} project-media--${safeToken(placement, 'center')} project-media--${safeToken(item.format, 'landscape')} ${radiusClass(item.radius || (item.kind === 'cutout' || item.kind === 'plan' ? 'none' : 'soft'))}${selected}`;
+    } else if (galleryMatch) {
+      element.style.cssText = imageStyle(item);
+      element.className = `gallery-item gallery-item--${safeToken(item.size, 'medium')} gallery-item--${safeToken(item.format, 'original')} ${radiusClass(item.radius || 'soft')}${selected}`;
+    } else {
+      element.style.cssText = `${imageStyle(item)};${blockStyle(item)}`;
+      const classes = `custom-block--align-${safeToken(item.align, 'left')} custom-block--${safeToken(item.format, 'original')}`;
+      const type = item.type === 'image' ? 'image' : item.type === 'quote' ? 'quote' : `text custom-block--${safeToken(item.style, 'body')}`;
+      element.className = `custom-block custom-block--${type} ${classes} ${radiusClass(item.radius || 'soft')}${selected}`;
+    }
+    return;
+  }
+  renderAll(runtime.site, runtime.projects);
 }
 
 function prepareAdminPreview() {
@@ -346,12 +419,15 @@ function prepareAdminPreview() {
   document.body.classList.add('admin-preview');
   document.body.classList.toggle('admin-preview--edit', previewEditMode);
   const coarsePointer = matchMedia('(pointer:coarse)').matches;
-  document.querySelectorAll('[data-edit-inline]').forEach((element) => { element.contentEditable = previewEditMode && !coarsePointer ? 'plaintext-only' : 'false'; element.spellcheck = true; });
+  document.querySelectorAll('[data-edit-inline]').forEach((element) => { element.contentEditable = previewEditMode && !coarsePointer && !element.closest('a, button') ? 'plaintext-only' : 'false'; element.spellcheck = true; });
   const hero = document.querySelector('.home-hero');
   if (hero && !hero.querySelector('.admin-image-handle')) {
     hero.insertAdjacentHTML('beforeend', '<button class="admin-image-handle" type="button" data-edit-path="site.heroImage" data-edit-label="Image de fond">✎ Image de fond</button>');
   }
-  window.parent.postMessage({ type: 'mayin:preview-ready', page, href: location.href }, location.origin);
+  if (!previewReadySent) {
+    previewReadySent = true;
+    window.parent.postMessage({ type: 'mayin:preview-ready', page, href: location.href }, location.origin);
+  }
 }
 
 if (isAdminPreview) {
@@ -369,7 +445,6 @@ if (isAdminPreview) {
     editable.classList.add('admin-selected');
     selectedPreviewElement = editable;
     window.parent.postMessage({ type: 'mayin:select', path: editable.dataset.editPath, styleId: editable.dataset.editStyleId || '', label: editable.dataset.editLabel || 'Élément' }, location.origin);
-    if (inline && !allowsNativeClick) editable.focus({ preventScroll: true });
   };
   document.addEventListener('pointerdown', (event) => {
     if (event.pointerType === 'touch' || event.pointerType === 'pen') touchStart = { x: event.clientX, y: event.clientY, id: event.pointerId };
@@ -400,6 +475,7 @@ if (isAdminPreview) {
   addEventListener('message', (event) => {
     if (event.origin !== location.origin || !event.data) return;
     if (event.data.type === 'mayin:data') renderAll(event.data.site, event.data.projects);
+    if (event.data.type === 'mayin:patch') updatePreviewValue(event.data.path, event.data.value);
     if (event.data.type === 'mayin:mode') { previewEditMode = event.data.mode === 'edit'; prepareAdminPreview(); }
   });
 }

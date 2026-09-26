@@ -37,7 +37,8 @@ let uploadCounter = 0;
 let inlineSessionPath = '';
 let previewMode = 'edit';
 let saveTimer = 0;
-let previewSyncTimer = 0;
+let previewPatchFrame = 0;
+const pendingPreviewPatches = new Map();
 let toastTimer = 0;
 let expandedProjectIndex = null;
 let dashboard = null;
@@ -69,13 +70,10 @@ function saveDraftSoon() {
   clearTimeout(saveTimer); setSaveState('Modifications…');
   saveTimer = setTimeout(() => { localStorage.setItem('mayin-studio-draft', JSON.stringify(data)); setSaveState('Brouillon local · non publié'); }, 500);
 }
-function syncPreviewSoon(delay = 240) {
-  clearTimeout(previewSyncTimer); previewSyncTimer = setTimeout(sendDraft, delay);
-}
 function markChanged(refreshInspector = true, syncPreview = true, refreshLists = true) {
   saveDraftSoon(); if (syncPreview) sendDraft(); if (refreshLists) renderProjectList(); if (refreshInspector) renderInspector();
 }
-function mutate(path, value, refresh = true) { pushHistory(); setPath(path, value); markChanged(refresh); }
+function mutate(path, value, refresh = true) { pushHistory(); setPath(path, value); saveDraftSoon(); sendPreviewPatch(path, value); if (refresh) renderInspector(); }
 function undo() { if (!undoStack.length) return; redoStack.push(JSON.stringify(data)); data = JSON.parse(undoStack.pop()); inlineSessionPath = ''; updateHistoryButtons(); saveDraftSoon(); renderAllAdmin(); setSaveState('Brouillon local · non publié'); }
 function redo() { if (!redoStack.length) return; undoStack.push(JSON.stringify(data)); data = JSON.parse(redoStack.pop()); inlineSessionPath = ''; updateHistoryButtons(); saveDraftSoon(); renderAllAdmin(); setSaveState('Brouillon local · non publié'); }
 function discardDraft() {
@@ -85,7 +83,19 @@ function discardDraft() {
 }
 
 function sendDraft() {
+  pendingPreviewPatches.clear();
   dom.frame.contentWindow?.postMessage({ type: 'mayin:data', site: data.site, projects: data.projects }, location.origin);
+}
+function sendPreviewPatch(path, value) {
+  pendingPreviewPatches.set(path, value);
+  if (previewPatchFrame) return;
+  previewPatchFrame = requestAnimationFrame(() => {
+    previewPatchFrame = 0;
+    for (const [changedPath, changedValue] of pendingPreviewPatches) {
+      dom.frame.contentWindow?.postMessage({ type: 'mayin:patch', path: changedPath, value: changedValue }, location.origin);
+    }
+    pendingPreviewPatches.clear();
+  });
 }
 function sendPreviewMode() { dom.frame.contentWindow?.postMessage({ type: 'mayin:mode', mode: previewMode }, location.origin); }
 function syncPreview() { sendDraft(); sendPreviewMode(); }
@@ -94,11 +104,6 @@ function setPreviewMode(mode) {
   $$('.segmented').forEach((button) => button.classList.toggle('is-active', button.dataset.mode === mode));
   sendPreviewMode();
   $('#workspace-hint').textContent = mode === 'edit' ? 'Clique sur un élément du site pour le modifier' : 'Navigation active — utilise les liens normalement';
-}
-function wirePreviewDocument() {
-  const previewDocument = dom.frame.contentDocument;
-  if (!previewDocument || previewDocument.documentElement.dataset.studioWired === 'true') return;
-  previewDocument.documentElement.dataset.studioWired = 'true';
 }
 function navigatePreview(href, pageId) {
   activePage = pageId || activePage; dom.frame.src = href;
@@ -202,6 +207,12 @@ function renderProject(index) {
     <div class="form-section"><h3>Images du projet (${project.media?.length || 0})</h3><div class="list-editor">${(project.media || []).map((item, mediaIndex) => `<button class="page-button" data-select-path="${base}.media.${mediaIndex}"><span>▧</span><span>${encode(item.caption || item.alt || `Image ${mediaIndex + 1}`)}</span></button>`).join('')}</div><button class="button" data-add-project-image="${index}">+ Ajouter une image</button></div>
     ${contentOutline(`${base}.media`, project.media || [], 'Ordre des images')}${blockControls(`${base}.blocks`)}${contentOutline(`${base}.blocks`, project.blocks || [], 'Ordre des blocs')}<div class="form-section"><h3>Organisation</h3><div class="field-row"><button class="button" data-move-path="projects.${index}" data-delta="-1">↑ Monter</button><button class="button" data-move-path="projects.${index}" data-delta="1">↓ Descendre</button></div><button class="button" data-duplicate-project="${index}">Dupliquer le projet</button></div><button class="danger-button" data-delete-project="${index}">Supprimer ce projet</button>`;
 }
+function renderProjectText(index, key) {
+  const project = data.projects[index]; if (!project) return renderEmpty();
+  const path = `projects.${index}.${key}`;
+  dom.inspectorTitle.textContent = key === 'title' ? 'Titre du projet' : 'Description du projet';
+  dom.inspector.innerHTML = `<div class="form-section"><h3>Contenu</h3>${field(key === 'title' ? 'Titre' : 'Description', path, key === 'title' ? 'text' : 'textarea')}</div>${elementStyleControls(selectedStyleId)}<button class="button" data-select-path="projects.${index}">Voir toutes les propriétés du projet</button>`;
+}
 function renderMedia(projectIndex, mediaIndex) {
   const base = `projects.${projectIndex}.media.${mediaIndex}`; const item = getPath(base); if (!item) return renderProject(projectIndex);
   dom.inspectorTitle.textContent = `Image ${mediaIndex + 1}`;
@@ -277,7 +288,7 @@ function renderInspector() {
   const parts = pathParts(selectedPath);
   if (parts[0] === 'projects' && typeof parts[1] === 'number' && parts[2] === 'media') return renderMedia(parts[1], parts[3]);
   if (parts[0] === 'projects' && typeof parts[1] === 'number' && parts[2] === 'blocks') return renderBlock(selectedPath);
-  if (parts[0] === 'projects' && typeof parts[1] === 'number') return parts.length > 3 || ['title','description','cover'].includes(parts[2]) ? renderProject(parts[1]) : renderProject(parts[1]);
+  if (parts[0] === 'projects' && typeof parts[1] === 'number') return ['title','description'].includes(parts[2]) ? renderProjectText(parts[1], parts[2]) : renderProject(parts[1]);
   if (parts.slice(0,3).join('.') === 'site.gallery.items' && typeof parts[3] === 'number') return renderGalleryItem(parts[3]);
   if (parts.slice(0,2).join('.') === 'site.customBlocks') return renderBlock(parts.slice(0,4).join('.'));
   if (parts.slice(0,2).join('.') === 'site.navigation' && typeof parts[2] === 'number') return renderLinkItem(parts.slice(0,3).join('.'));
@@ -333,7 +344,7 @@ async function publish() {
 }
 
 function showLogin() { dom.boot.hidden = true; dom.studio.hidden = true; dom.login.hidden = false; }
-function showStudio() { dom.boot.hidden = true; dom.login.hidden = true; dom.studio.hidden = false; dom.accountName.textContent = currentUser?.login || 'Administratrice'; dom.studioVersion.textContent = data.site?.studioVersion || '1.3.0'; if (currentUser?.avatar) { dom.accountAvatar.src = currentUser.avatar; dom.accountAvatar.hidden = false; } loadDashboard().then(() => { if (activePanel === 'dashboard') renderDashboard(); }); renderAllAdmin(); setTimeout(() => { syncPreview(); wirePreviewDocument(); }, 120); }
+function showStudio() { dom.boot.hidden = true; dom.login.hidden = true; dom.studio.hidden = false; dom.accountName.textContent = currentUser?.login || 'Administratrice'; dom.studioVersion.textContent = '1.3.1'; if (currentUser?.avatar) { dom.accountAvatar.src = currentUser.avatar; dom.accountAvatar.hidden = false; } loadDashboard().then(() => { if (activePanel === 'dashboard') renderDashboard(); }); renderAllAdmin(); }
 async function loadPublicData() {
   const [site, projects] = await Promise.all([fetch('../content/site.json',{cache:'no-store'}).then(r=>r.json()), fetch('../content/projects.json',{cache:'no-store'}).then(r=>r.json())]);
   apiBase = site.admin?.apiBase || ''; return { site, projects: projects.projects };
@@ -353,12 +364,11 @@ async function boot() {
   } catch (error) { console.error(error); showLogin(); showToast('Le service d’administration n’est pas encore disponible', true); }
 }
 
-dom.frame.addEventListener('load', () => setTimeout(() => { syncPreview(); wirePreviewDocument(); }, 60));
 addEventListener('message', (event) => {
-  if (event.source !== dom.frame.contentWindow || !event.data) return;
-  if (event.data.type === 'mayin:preview-ready') sendDraft();
+  if (event.origin !== location.origin || event.source !== dom.frame.contentWindow || !event.data) return;
+  if (event.data.type === 'mayin:preview-ready' && data.site) syncPreview();
   if (event.data.type === 'mayin:select') selectPreviewPath(event.data.path, event.data.styleId);
-  if (event.data.type === 'mayin:inline') { if (inlineSessionPath !== event.data.path) { pushHistory(); inlineSessionPath = event.data.path; } setPath(event.data.path, event.data.value); markChanged(false, false, false); }
+  if (event.data.type === 'mayin:inline') { if (inlineSessionPath !== event.data.path) { pushHistory(); inlineSessionPath = event.data.path; } setPath(event.data.path, event.data.value); const field = [...dom.inspector.querySelectorAll('[data-path]')].find((input) => input.dataset.path === event.data.path); if (field && field !== document.activeElement) field.value = event.data.value; markChanged(false, false, false); }
   if (event.data.type === 'mayin:inline-commit') { if (inlineSessionPath === event.data.path) { const projectIndex = pathParts(event.data.path)[0] === 'projects' ? pathParts(event.data.path)[1] : null; inlineSessionPath = ''; if (typeof projectIndex === 'number') renderProjectList(); } }
 });
 dom.loginButton.addEventListener('click', () => { if (!apiBase || apiBase.includes('REMPLACER')) return showToast('La connexion sécurisée est en cours de configuration', true); location.href = `${apiBase}/auth/login?returnTo=${encodeURIComponent(location.href)}`; });
@@ -386,10 +396,23 @@ dom.accountButton.addEventListener('click', () => { const open = dom.accountMenu
 document.addEventListener('click', (event) => { if (!event.target.closest('.account-wrap')) { dom.accountMenu.hidden = true; dom.accountButton.setAttribute('aria-expanded', 'false'); } });
 dom.accountMenu.addEventListener('click', (event) => { const action = event.target.closest('[data-account-action]')?.dataset.accountAction; if (!action) return; if (action === 'site') return dom.previewPublic.click(); if (action === 'dashboard') { dom.accountMenu.hidden=true; openDashboard(); return; } if (action === 'draft') return showToast(localStorage.getItem('mayin-studio-draft') ? 'Un brouillon est conservé sur cet appareil.' : 'Aucun brouillon en attente.'); if (action === 'logout') { if (localMode) return showToast('Mode local'); sessionStorage.removeItem('mayin-session'); sessionToken=''; location.reload(); } });
 dom.imageInput.addEventListener('change', () => handleUpload(dom.imageInput.files[0]));
-dom.inspector.addEventListener('focusin', (event) => { if (event.target.matches('[data-path]')) inlineSessionPath=''; });
-dom.inspector.addEventListener('input', (event) => { if (event.target.type === 'range') event.target.nextElementSibling.textContent=`${event.target.value}${event.target.dataset.unit || '%'}`; });
+let activeInspectorEdit = null;
+function inspectorValue(input) { return input.type === 'checkbox' ? input.checked : input.type === 'range' ? Number(input.value) : input.value; }
+dom.inspector.addEventListener('focusin', (event) => { if (event.target.matches('[data-path]')) { inlineSessionPath=''; if (activeInspectorEdit !== event.target) activeInspectorEdit = null; } });
+dom.inspector.addEventListener('input', (event) => {
+  const input = event.target.closest('[data-path]'); if (!input) return;
+  if (input.type === 'range') input.nextElementSibling.textContent = `${input.value}${input.dataset.unit || '%'}`;
+  if (activeInspectorEdit !== input) { pushHistory(); activeInspectorEdit = input; }
+  const value = inspectorValue(input);
+  setPath(input.dataset.path, value); saveDraftSoon(); sendPreviewPatch(input.dataset.path, value);
+});
 dom.inspector.addEventListener('change', (event) => {
-  const input=event.target.closest('[data-path]'); if(!input)return; let value=input.type==='checkbox'?input.checked:input.value; if(input.type==='range')value=Number(value); pushHistory(); setPath(input.dataset.path,value); markChanged(false); sendDraft();
+  const input = event.target.closest('[data-path]'); if (!input) return;
+  if (activeInspectorEdit !== input) pushHistory();
+  const value = inspectorValue(input);
+  setPath(input.dataset.path, value); saveDraftSoon(); sendPreviewPatch(input.dataset.path, value);
+  activeInspectorEdit = null;
+  if (/^projects\.\d+\.(title|description)$/.test(input.dataset.path)) renderProjectList();
 });
 dom.inspector.addEventListener('click', (event) => {
   const upload=event.target.closest('[data-upload-path]'); if(upload)return startUpload({type:'path',path:upload.dataset.uploadPath});
