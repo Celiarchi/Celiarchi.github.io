@@ -7,7 +7,7 @@ const isAdminPreview = previewParams.get('admin-preview') === '1' && window.pare
 let previewEditMode = true;
 let runtime = { site: null, projects: [] };
 
-document.head.insertAdjacentHTML('beforeend', '<link rel="stylesheet" href="dynamic.css?v=8"><link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="manifest" href="site.webmanifest">');
+document.head.insertAdjacentHTML('beforeend', '<link rel="stylesheet" href="dynamic.css?v=9"><link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="manifest" href="site.webmanifest">');
 
 const escapeHtml = (value = '') => String(value).replace(/[&<>'"]/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#039;', '"': '&quot;' })[character]);
 const getJson = async (path) => { const response = await fetch(path, { cache: 'no-store' }); if (!response.ok) throw new Error('Contenu indisponible'); return response.json(); };
@@ -45,6 +45,7 @@ function normaliseSite(site) {
   site.gallery.categories ||= [];
   site.gallery.items ||= [];
   site.customBlocks ||= {};
+  site.elementStyles ||= {};
   ['home', 'projects', 'gallery', 'about', 'contact', 'notFound'].forEach((key) => { site.customBlocks[key] ||= []; });
   return site;
 }
@@ -75,7 +76,7 @@ function renderNavigation(site) {
   const current = location.pathname.split('/').pop() || 'index.html';
   navigation.innerHTML = site.navigation.filter((item) => item.visible !== false).map((item, index) => {
     const active = item.href.split('?')[0] === current || (current === '' && item.href === 'index.html');
-    return `<a ${active ? 'aria-current="page"' : ''} href="${escapeHtml(item.href)}" data-edit-path="site.navigation.${index}" data-edit-label="Lien de navigation">${escapeHtml(item.label)}</a>`;
+    return `<a ${active ? 'aria-current="page"' : ''} href="${escapeHtml(item.href)}" data-edit-path="site.navigation.${index}" data-edit-label="Lien de navigation" data-edit-inline="true">${escapeHtml(item.label)}</a>`;
   }).join('');
 }
 
@@ -144,7 +145,7 @@ function applyStructuredData(site) {
 function renderSocialLinks(site) {
   const links = (site.socialLinks || []).filter((item) => item.visible !== false && item.label);
   document.querySelectorAll('[data-social-links]').forEach((container) => {
-    container.innerHTML = links.map((item, index) => `<a href="${escapeHtml(item.url || '#')}" ${item.url?.startsWith('http') ? 'target="_blank" rel="noreferrer"' : ''} data-edit-path="site.socialLinks.${index}" data-edit-label="Lien social">${escapeHtml(item.label)}</a>`).join('<span aria-hidden="true"> · </span>');
+    container.innerHTML = links.map((item, index) => `<a href="${escapeHtml(item.url || '#')}" ${item.url?.startsWith('http') ? 'target="_blank" rel="noreferrer"' : ''} data-edit-path="site.socialLinks.${index}" data-edit-label="Lien social" data-edit-inline="true">${escapeHtml(item.label)}</a>`).join('<span aria-hidden="true"> · </span>');
     container.hidden = links.length === 0;
   });
 }
@@ -153,7 +154,9 @@ function radiusClass(value) { return `radius-${safeToken(value, 'soft')}`; }
 function imageStyle(item = {}) {
   const width = Math.max(25, Math.min(100, Number(item.width) || 100));
   const position = safeToken(item.objectPosition, 'center');
-  return `--media-width:${width}%;--media-position:${position.replace('-', ' ')}`;
+  const offsetX = boundedSetting(item.offsetX, -500, 500, 0);
+  const offsetY = boundedSetting(item.offsetY, -500, 500, 0);
+  return `--media-width:${width}%;--media-position:${position.replace('-', ' ')};--media-offset-x:${offsetX}px;--media-offset-y:${offsetY}px`;
 }
 function blockSurface(block = {}) {
   const surfaces = { paper: 'var(--paper)', soft: 'var(--soft)', ink: 'var(--ink)', accent: 'var(--wine)' };
@@ -176,7 +179,44 @@ function blockStyle(block = {}) {
   const align = safeToken(block.align, 'left');
   const textAlign = safeToken(block.textAlign, 'left');
   const font = safeToken(block.fontFamily, 'sans');
-  return `--block-width:${width}%;--block-min-height:${minHeight}px;--block-padding:${padding}px;--block-gap:${gap}px;--block-font-size:${fontSize}px;--block-align:${align};--block-text-align:${textAlign};--block-font:var(--${font});--block-color:${blockTextColor(block)};--block-background:${blockSurface(block)}`;
+  const offsetX = boundedSetting(block.offsetX, -500, 500, 0);
+  const offsetY = boundedSetting(block.offsetY, -500, 500, 0);
+  return `--block-width:${width}%;--block-min-height:${minHeight}px;--block-padding:${padding}px;--block-gap:${gap}px;--block-font-size:${fontSize}px;--block-align:${align};--block-text-align:${textAlign};--block-font:var(--${font});--block-color:${blockTextColor(block)};--block-background:${blockSurface(block)};--block-offset-x:${offsetX}px;--block-offset-y:${offsetY}px`;
+}
+function paletteValue(style, key, site, customKey = 'customColor') {
+  const palette = (site.design?.palettes || []).find((item) => item.id === site.design?.activePalette) || site.design?.palettes?.[0] || {};
+  if (key === 'custom') return style[customKey] || '#2a1718';
+  return { ink: palette.ink, accent: palette.accent, paper: palette.paper, soft: palette.soft || palette.paper }[key] || '';
+}
+function applyElementStyles(site) {
+  document.querySelectorAll('[data-edit-inline]').forEach((element, index) => {
+    const styleId = element.dataset.editStyleId || `${page || 'home'}-text-${index}`;
+    element.dataset.editStyleId = styleId;
+    const style = site.elementStyles?.[styleId];
+    if (!style) return;
+    ['font-family','font-size','text-align','color','background','display','width','max-width','margin-left','margin-right','min-height','padding','border-radius','transform'].forEach((property) => element.style.removeProperty(property));
+    const number = (value, min, max) => Number.isFinite(Number(value)) ? Math.max(min, Math.min(max, Number(value))) : null;
+    const fontSize = number(style.fontSize, 10, 160);
+    const width = number(style.width, 20, 100);
+    const padding = number(style.padding, 0, 160);
+    const minHeight = number(style.minHeight, 0, 720);
+    const offsetX = number(style.offsetX, -500, 500) || 0;
+    const offsetY = number(style.offsetY, -500, 500) || 0;
+    if (Object.hasOwn(style, 'hidden')) element.hidden = Boolean(style.hidden);
+    if (style.fontFamily) element.style.fontFamily = `var(--${safeToken(style.fontFamily, 'sans')})`;
+    if (fontSize !== null) element.style.fontSize = `${fontSize}px`;
+    if (style.textAlign) element.style.textAlign = safeToken(style.textAlign, 'left');
+    if (style.textColor && style.textColor !== 'inherit') element.style.color = paletteValue(style, style.textColor, site);
+    if (style.background && style.background !== 'none') element.style.background = paletteValue(style, style.background, site, 'backgroundColor');
+    if (width !== null || padding !== null || minHeight !== null || (style.background && style.background !== 'none') || offsetX || offsetY) element.style.display = 'block';
+    if (width !== null) { element.style.width = `${width}%`; element.style.maxWidth = '100%'; }
+    if (style.align === 'center') element.style.marginInline = 'auto';
+    if (style.align === 'right') element.style.marginLeft = 'auto';
+    if (padding !== null) element.style.padding = `${padding}px`;
+    if (minHeight !== null) element.style.minHeight = `${minHeight}px`;
+    if (style.radius) element.style.borderRadius = `${number(style.radius, 0, 100) || 0}px`;
+    if (offsetX || offsetY) element.style.transform = `translate(${offsetX}px, ${offsetY}px)`;
+  });
 }
 function categoryLabel(category) { return category === 'public' ? runtime.site.publicLabel : runtime.site.privateLabel; }
 
@@ -184,7 +224,7 @@ function projectCard(project, index) {
   const image = project.cover ? `<img src="${assetSrc(project.cover)}" alt="${escapeHtml(project.title)}" loading="lazy" decoding="async" />` : '<span class="project-image__empty">Image à ajouter</span>';
   const cutout = project.coverKind === 'cutout' ? ' project-card--cutout' : '';
   const radius = radiusClass(project.coverRadius || 'soft');
-  return `<a class="project-card project-card--${safeToken(project.layout, 'wide')}${cutout} ${radius}" data-category="${escapeHtml(project.category)}" data-edit-path="projects.${index}" data-edit-label="Projet" href="project.html?slug=${encodeURIComponent(project.slug)}"><div class="project-image" style="${imageStyle(project)}">${image}</div><div class="project-meta"><span>${categoryLabel(project.category)}</span><span>${escapeHtml(project.description)}</span><span class="project-arrow">↗</span></div><h2 data-edit-path="projects.${index}.title" data-edit-label="Titre du projet" data-edit-inline="true">${escapeHtml(project.title)}</h2></a>`;
+  return `<a class="project-card project-card--${safeToken(project.layout, 'wide')}${cutout} ${radius}" data-category="${escapeHtml(project.category)}" data-edit-path="projects.${index}" data-edit-label="Projet" href="project.html?slug=${encodeURIComponent(project.slug)}"><div class="project-image" style="${imageStyle(project)}">${image}</div><div class="project-meta"><span>${categoryLabel(project.category)}</span><span data-edit-path="projects.${index}.description" data-edit-label="Description du projet" data-edit-inline="true">${escapeHtml(project.description)}</span><span class="project-arrow">↗</span></div><h2 data-edit-path="projects.${index}.title" data-edit-label="Titre du projet" data-edit-inline="true">${escapeHtml(project.title)}</h2></a>`;
 }
 
 function renderProjects(projects) {
@@ -296,6 +336,7 @@ function renderAll(site, projects) {
   if (page === 'gallery') renderGallery(runtime.site);
   renderCustomBlocks(runtime.site);
   renderContactForm(runtime.site);
+  applyElementStyles(runtime.site);
   startAnonymousAnalytics(runtime.site);
   prepareAdminPreview();
 }
@@ -327,8 +368,8 @@ if (isAdminPreview) {
     if (selectedPreviewElement && selectedPreviewElement !== editable) selectedPreviewElement.classList.remove('admin-selected');
     editable.classList.add('admin-selected');
     selectedPreviewElement = editable;
-    window.parent.postMessage({ type: 'mayin:select', path: editable.dataset.editPath, label: editable.dataset.editLabel || 'Élément' }, location.origin);
-    if (inline) editable.focus({ preventScroll: true });
+    window.parent.postMessage({ type: 'mayin:select', path: editable.dataset.editPath, styleId: editable.dataset.editStyleId || '', label: editable.dataset.editLabel || 'Élément' }, location.origin);
+    if (inline && !allowsNativeClick) editable.focus({ preventScroll: true });
   };
   document.addEventListener('pointerdown', (event) => {
     if (event.pointerType === 'touch' || event.pointerType === 'pen') touchStart = { x: event.clientX, y: event.clientY, id: event.pointerId };
